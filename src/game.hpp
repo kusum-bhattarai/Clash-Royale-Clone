@@ -1,6 +1,7 @@
 #pragma once
 #include "board.hpp"
 #include "renderer.hpp"
+#include "input_handler.hpp"
 #include <vector>
 #include <memory>
 
@@ -11,22 +12,23 @@ public:
 
 private:
     void processInput();
+    void runAI();
     void update();
     void render();
     void spawnTroop(char type, int x, bool isPlayerOne);
     void handleCombat();
     void updateElixir();
-    void switchTurns();
 
     Board board;
     Renderer renderer;
+    InputHandler inputHandler;
     bool isRunning;
     float elixirPlayerOne;
     float elixirPlayerTwo;
     float elixirTimer;
-    bool isPlayerOneTurn;
     float gameTimer;
-    const float GAME_DURATION = 120.0f; // 2 minutes in seconds
+    int renderCounter; 
+    const float GAME_DURATION = 120.0f;
     const float ELIXIR_REGEN_RATE = 2.8f;
     const float MAX_ELIXIR = 10.0f;
 };

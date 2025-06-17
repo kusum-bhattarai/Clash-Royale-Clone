@@ -1,9 +1,20 @@
 #include "entity.hpp"
 #include "board.hpp"
+#include "renderer.hpp"
 
 Entity::Entity(EntityType type, int x, int y, bool isPlayer, int health)
     : m_type(type), m_x(x), m_y(y), m_isPlayer(isPlayer), m_health(health), m_maxHealth(health), 
       m_moveTimer(0), m_moveSpeed(0), m_attackRange(1), m_damage(0), m_isFlying(false), m_canAttackAir(false) {
+    // Validate initial position
+    if (x < 1 || x >= Renderer::BOARD_WIDTH - 1 || y < 1 || y >= Renderer::BOARD_HEIGHT - 1) {
+        logWarning("Initial position out of bounds, clamping");
+        m_x = std::max(1, std::min(x, Renderer::BOARD_WIDTH - 2));
+        m_y = std::max(1, std::min(y, Renderer::BOARD_HEIGHT - 2));
+    }
+    if (health <= 0) {
+        logWarning("Initial health invalid, setting to 1");
+        m_health = 1;
+    }
     m_isFlying = false;
     m_canAttackAir = false;
     calculateStats();
@@ -70,24 +81,21 @@ void Entity::calculateStats() {
     }
 }
 
-void Entity::update() {
+void Entity::update(const Board& board) {
     if (m_type != EntityType::KING_TOWER && m_type != EntityType::QUEEN_TOWER && m_type != EntityType::CANON) {
         m_moveTimer += 0.1f;
         if (m_moveTimer >= 1.0f / m_moveSpeed) {
             m_moveTimer = 0;
-            move();
+            move(board);
         }
     }
 }
 
-void Entity::move() {
+void Entity::move(const Board& board) {
     if (!isAlive() || m_type == EntityType::KING_TOWER || 
         m_type == EntityType::QUEEN_TOWER || m_type == EntityType::CANON) return;
     
-    const Board* currentBoard = Board::getCurrentBoard();
-    if (!currentBoard) return;
-    
-    auto target = findTarget(*currentBoard);
+    auto target = findTarget(board);
     
     // direction to target
     int dx = target.first - m_x;
@@ -191,15 +199,23 @@ void Entity::move() {
     }
     
     // Boundary checks
-    if (m_x < 1) m_x = 1;
-    if (m_x > 28) m_x = 28;
-    if (m_y < 1) m_y = 1;
-    if (m_y > 28) m_y = 28;
+    if (m_x < 1 || m_x >= Renderer::BOARD_WIDTH - 1 || m_y < 1 || m_y >= Renderer::BOARD_HEIGHT - 1) {
+        logWarning("Movement out of bounds, clamping");
+        m_x = std::max(1, std::min(m_x, Renderer::BOARD_WIDTH - 2));
+        m_y = std::max(1, std::min(m_y, Renderer::BOARD_HEIGHT - 2));
+    }
 }
 
 void Entity::takeDamage(int damage) {
+   if (damage < 0) {
+        logWarning("Negative damage received");
+        return;
+    }
     m_health -= damage;
-    if (m_health < 0) m_health = 0;
+    if (m_health < 0) {
+        logWarning("Health went negative, clamping to 0");
+        m_health = 0;
+    }
 }
 
 bool Entity::isAlive() const {

@@ -4,33 +4,31 @@
 #include <memory>
 #include <cmath>
 #include <utility>
+#include <iostream>
 
-// Forward declaration
 class Board;
 
 enum class EntityType {
     KING_TOWER,
     QUEEN_TOWER,
-    KNIGHT,       // Speed: 1.0, Medium armor
-    GOLEM,        // Speed: 0.5, Heavy armor
-    PEKKA,        // Speed: 0.75, Heavy armor
-    GOBLINS,      // Speed: 1.2, Light armor
-    DRAGON,       // Speed: 1.5, Flying unit
-    WIZARD,       // Speed: 1.0, Ranged attacker
-    ARCHERS,      // Speed: 1.2, Ranged attacker
-    CANON         // Speed: 0, Stationary defense
+    KNIGHT,
+    GOLEM,
+    PEKKA,
+    GOBLINS,
+    DRAGON,
+    WIZARD,
+    ARCHERS,
+    CANON
 };
 
 class Entity {
 public:
     Entity(EntityType type, int x, int y, bool isPlayer, int health);
     
-    // Public interface
-    void update();
+    void update(const Board& board);
     void takeDamage(int damage);
     bool isAlive() const;
     
-    // Getters
     EntityType getType() const { return m_type; }
     int getX() const { return m_x; }
     int getY() const { return m_y; }
@@ -42,12 +40,10 @@ public:
     int getDamage() const { return m_damage; }
     char getSymbol() const;
 
-    // Add setters
     void setIsFlying(bool flying) { m_isFlying = flying; }
     void setCanAttackAir(bool canAttack) { m_canAttackAir = canAttack; }
 
 private:
-    // Private member variables
     EntityType m_type;
     int m_x, m_y;
     float m_moveTimer;
@@ -60,9 +56,12 @@ private:
     bool m_isFlying;
     bool m_canAttackAir;
     
-    // Private helper functions
-    void move();
+    void move(const Board& board); // Moved back to private
     void calculateStats();
     std::pair<int, int> findTarget(const Board& board) const;
     bool isValidTarget(const Entity& target) const;
+    
+    void logWarning(const std::string& message) const {
+        std::cerr << "Warning [Entity " << getSymbol() << " at (" << m_x << "," << m_y << ")]: " << message << std::endl;
+    }
 };
