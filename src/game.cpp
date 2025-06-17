@@ -31,6 +31,37 @@ void Game::run() {
         processInput(); // Handle user input
         update();       // Update game state, including AI moves
         render();       // Draw the result
+
+        if (!isRunning) {
+            // Clear the prompt to avoid clutter
+            renderer.clear();
+            renderer.drawBoard(board);
+            renderer.drawStatus(elixirPlayerOne, elixirPlayerTwo, true, gameTimer);
+            // Display end message as a prompt
+            std::string endMessage;
+            int p1Health = 0, p2Health = 0;
+            for (const auto& entity : board.getEntities()) {
+                if (entity->getType() == EntityType::KING_TOWER || 
+                    entity->getType() == EntityType::QUEEN_TOWER) {
+                    if (entity->getIsPlayer()) { 
+                        p1Health += entity->getHealth();
+                    } else {
+                        p2Health += entity->getHealth();
+                    }
+                }
+            }
+            if (p1Health > p2Health) {
+                endMessage = "Game Over! Winner: Player 1 (You)!";
+            } else if (p2Health > p1Health) {
+                endMessage = "Game Over! Winner: Player 2 (AI)!";
+            } else {
+                endMessage = "Game Over! It's a draw!";
+            }
+            renderer.drawPrompt(endMessage);
+            renderer.display();
+            break;
+        }
+        
         std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Game speed
     }
 }
@@ -185,15 +216,6 @@ void Game::update() {
                     p2Health += entity->getHealth();
                 }
             }
-        }
-        
-        std::cout << "\nGame Over!\n";
-        if (p1Health > p2Health) {
-            std::cout << "Winner: Player 1 (You)!\n";
-        } else if (p2Health > p1Health) {
-            std::cout << "Winner: Player 2 (AI)!\n";
-        } else {
-            std::cout << "It's a draw!\n";
         }
         isRunning = false;
         return;
