@@ -83,6 +83,18 @@ void Renderer::drawStatus(float elixirPlayerOne, float elixirPlayerTwo, bool isP
     buffer[BOARD_HEIGHT - 1] = status;
 }
 
+void Renderer::drawPrompt(const std::string& message) {
+    std::string prompt = message;
+    while (prompt.length() < BOARD_WIDTH) {
+        prompt = " " + prompt + " ";
+    }
+    if (prompt.length() > BOARD_WIDTH) {
+        prompt = prompt.substr(0, BOARD_WIDTH);
+    }
+    buffer[BOARD_HEIGHT - 2] = prompt;
+}
+
+
 void Renderer::display() {
     std::cout << "\033[H";
     for (const auto& row : buffer) {

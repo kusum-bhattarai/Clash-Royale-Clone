@@ -9,6 +9,7 @@ public:
     void clear();
     void drawBoard(const Board& board);
     void drawStatus(float elixirPlayerOne, float elixirPlayerTwo, bool isPlayerOneTurn, float gameTimer = 0.0f);
+    void drawPrompt(const std::string& message);
     void display();
     static const int BOARD_WIDTH = 40;
     static const int BOARD_HEIGHT = 35;
