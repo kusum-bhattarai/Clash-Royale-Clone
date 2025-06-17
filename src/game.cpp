@@ -8,16 +8,21 @@
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0) {
     std::srand(std::time(nullptr));
+
+    int centerX = 19;
+    int sideOffset = 12;
+    int p2_king_y = 3, p2_queen_y = 5;
+    int p1_king_y = 27, p1_queen_y = 25;
     
     // Initialize Player 2 (AI) towers at the top
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, 13, 2, false, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, 6, 2, false, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, 20, 2, false, 1500));
+    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p2_king_y, false, 4000));
+    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, 1500));
+    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, 1500));
     
     // Initialize Player 1 (User) towers at the bottom
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, 13, 27, true, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, 6, 27, true, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, 20, 27, true, 1500));
+    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p1_king_y, true, 4000));
+    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, 1500));
+    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, 1500));
 }
 
 void Game::run() {
@@ -25,7 +30,7 @@ void Game::run() {
         processInput(); // Handle user input
         update();       // Update game state, including AI moves
         render();       // Draw the result
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Game speed
+        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Game speed
     }
 }
 
