@@ -5,6 +5,16 @@
 #include <vector>
 #include <memory>
 
+enum class Lane {
+    LEFT,
+    RIGHT
+};
+
+enum class GameState {
+    SELECTING_TROOP,
+    SELECTING_LANE
+};
+
 class Game {
 public:
     Game();
@@ -15,7 +25,7 @@ private:
     void runAI();
     void update();
     void render();
-    void spawnTroop(char type, int x, bool isPlayerOne);
+    void spawnTroop(EntityType type, Lane lane, bool isPlayerOne);
     void handleCombat();
     void updateElixir();
 
@@ -31,4 +41,6 @@ private:
     const float GAME_DURATION = 120.0f;
     const float ELIXIR_REGEN_RATE = 2.8f;
     const float MAX_ELIXIR = 10.0f;
+    GameState currentGameState;
+    EntityType pendingTroopType;
 };
