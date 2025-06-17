@@ -6,7 +6,8 @@
 #include <iostream>
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
-               elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0) {
+               elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
+               currentGameState(GameState::SELECTING_TROOP) {
     std::srand(std::time(nullptr));
 
     int centerX = 19;
@@ -38,70 +39,154 @@ void Game::processInput() {
     auto input = inputHandler.getInput();
     if (!input.has_value()) return;
 
-    switch (*input) {
-        case 'q':
+    if (currentGameState == GameState::SELECTING_LANE && (*input == 'x' || *input == 'q')) {
+        currentGameState = GameState::SELECTING_TROOP;
+        if(*input == 'q') isRunning = false;
+        return;
+    }
+
+    if (currentGameState == GameState::SELECTING_TROOP) {
+        if (*input == 'q') {
             isRunning = false;
             return;
-        case 'k': // Knight (4)
-        case 'g': // Golem (5)
-        case 'p': // Pekka (4)
-        case 'b': // Goblins (3)
-        case 'd': // Dragon (5)
-        case 'w': // Wizard (4)
-        case 'a': // Archers (2)
-        case 'c': // Canon (3)
-            {
-                float cost = (*input == 'g' || *input == 'd') ? 5.0f :
-                            (*input == 'a') ? 2.0f :
-                            (*input == 'b' || *input == 'c') ? 3.0f : 4.0f;
-                    
-                if (elixirPlayerOne >= cost) {
-                    // Player 1 (user) is always 'true'
-                    spawnTroop(std::toupper(*input), 0, true);
-                    elixirPlayerOne -= cost;
-                }
-            }
-            break;
+        }
+
+        EntityType selectedType;
+        float cost = 0;
+
+        switch (*input) {
+            case 'k': selectedType = EntityType::KNIGHT; cost = 4.0f; break;
+            case 'g': selectedType = EntityType::GOLEM; cost = 5.0f; break;
+            case 'p': selectedType = EntityType::PEKKA; cost = 4.0f; break;
+            case 'b': selectedType = EntityType::GOBLINS; cost = 3.0f; break;
+            case 'd': selectedType = EntityType::DRAGON; cost = 5.0f; break;
+            case 'w': selectedType = EntityType::WIZARD; cost = 4.0f; break;
+            case 'a': selectedType = EntityType::ARCHERS; cost = 2.0f; break;
+            case 'c': selectedType = EntityType::CANON; cost = 3.0f; break;
+            default: return;
+        }
+
+        if (elixirPlayerOne >= cost) {
+            pendingTroopType = selectedType;
+            currentGameState = GameState::SELECTING_LANE;
+        }
+
+    } else if (currentGameState == GameState::SELECTING_LANE) {
+        Lane selectedLane;
+        if (*input == 'l') {
+            selectedLane = Lane::LEFT;
+        } else if (*input == 'r') {
+            selectedLane = Lane::RIGHT;
+        } else {
+            return;
+        }
+        
+        float cost = 0;
+        switch (pendingTroopType) {
+            case EntityType::KNIGHT: cost = 4.0f; break;
+            case EntityType::GOLEM: cost = 5.0f; break;
+            case EntityType::PEKKA: cost = 4.0f; break;
+            case EntityType::GOBLINS: cost = 3.0f; break;
+            case EntityType::DRAGON: cost = 5.0f; break;
+            case EntityType::WIZARD: cost = 4.0f; break;
+            case EntityType::ARCHERS: cost = 2.0f; break;
+            case EntityType::CANON: cost = 3.0f; break;
+            default: break;
+        }
+
+        if (elixirPlayerOne >= cost) {
+            spawnTroop(pendingTroopType, selectedLane, true);
+            elixirPlayerOne -= cost;
+        }
+        
+        currentGameState = GameState::SELECTING_TROOP;
     }
 }
 
 void Game::runAI() {
-    // A simple AI that has a chance to deploy a troop if it has enough elixir
-    if (elixirPlayerTwo >= 3.0f) { // AI needs at least 3 elixir to consider a move
-        bool shouldDeploy = (rand() % 10) < 3; // 30% chance to deploy each update cycle
+    if (elixirPlayerTwo >= 3.0f) { 
+        bool shouldDeploy = (rand() % 10) < 3; 
         if (shouldDeploy) {
-            char troopTypes[] = {'k', 'g', 'p', 'b', 'd', 'w', 'a', 'c'};
-            char type = troopTypes[rand() % sizeof(troopTypes)];
-
-            float cost = (type == 'g' || type == 'd') ? 5.0f :
-                         (type == 'a') ? 2.0f :
-                         (type == 'b' || type == 'c') ? 3.0f : 4.0f;
+            EntityType type;
+            float cost;
+            int choice = rand() % 8;
+            switch(choice) {
+                case 0: type = EntityType::KNIGHT; cost = 4.0f; break;
+                case 1: type = EntityType::GOLEM; cost = 5.0f; break;
+                case 2: type = EntityType::PEKKA; cost = 4.0f; break;
+                case 3: type = EntityType::GOBLINS; cost = 3.0f; break;
+                case 4: type = EntityType::DRAGON; cost = 5.0f; break;
+                case 5: type = EntityType::WIZARD; cost = 4.0f; break;
+                case 6: type = EntityType::ARCHERS; cost = 2.0f; break;
+                default: type = EntityType::CANON; cost = 3.0f; break;
+            }
             
             if (elixirPlayerTwo >= cost) {
-                // Player 2 (AI) is always 'false'
-                spawnTroop(std::toupper(type), 0, false);
+                Lane aiLane = (rand() % 2 == 0) ? Lane::LEFT : Lane::RIGHT;
+                spawnTroop(type, aiLane, false);
                 elixirPlayerTwo -= cost;
             }
         }
     }
 }
 
+void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
+    int health = 0;
+    
+    int spawnX = 0;
+    if (lane == Lane::LEFT) {
+        spawnX = Renderer::BOARD_WIDTH / 4;
+    } else { // Lane::RIGHT
+        spawnX = Renderer::BOARD_WIDTH * 3 / 4;
+    }
+
+    int spawnY = isPlayerOne ? (Renderer::BOARD_HEIGHT / 2) + 3 : (Renderer::BOARD_HEIGHT / 2) - 3;
+    
+    switch (type) {
+        case EntityType::KNIGHT: health = 600; break;
+        case EntityType::GOLEM: health = 500; break;
+        case EntityType::PEKKA: health = 600; break;
+        case EntityType::GOBLINS: health = 200; break;
+        case EntityType::DRAGON: health = 600; break;
+        case EntityType::WIZARD: health = 500; break;
+        case EntityType::ARCHERS: health = 120; break;
+        case EntityType::CANON:
+            health = 500;
+            spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
+            break;
+        default: return;
+    }
+    
+    // Correctly uses spawnX and spawnY
+    board.addEntity(std::make_shared<Entity>(type, spawnX, spawnY, isPlayerOne, health));
+}
+
+void Game::render() {
+    renderCounter++;
+    renderer.clear();
+    renderer.drawBoard(board);
+    renderer.drawStatus(elixirPlayerOne, elixirPlayerTwo, true, gameTimer);
+    if(currentGameState == GameState::SELECTING_LANE) {
+        renderer.drawPrompt("SELECT LANE: (L)eft or (R)ight. (X) to cancel.");
+    }
+    renderer.display();
+}
+
 void Game::update() {
-    gameTimer += 0.2f; // Each loop is 200ms
+    gameTimer += 0.1f;
     if (gameTimer >= GAME_DURATION) {
         int p1Health = 0, p2Health = 0;
         for (const auto& entity : board.getEntities()) {
             if (entity->getType() == EntityType::KING_TOWER || 
                 entity->getType() == EntityType::QUEEN_TOWER) {
-                if (entity->getIsPlayer()) { // Player 1's towers
+                if (entity->getIsPlayer()) { 
                     p1Health += entity->getHealth();
-                } else { // Player 2's towers
+                } else {
                     p2Health += entity->getHealth();
                 }
             }
         }
         
-        // Determine winner based on remaining tower health
         std::cout << "\nGame Over!\n";
         if (p1Health > p2Health) {
             std::cout << "Winner: Player 1 (You)!\n";
@@ -121,7 +206,7 @@ void Game::update() {
 }
 
 void Game::updateElixir() {
-    elixirTimer += 0.2f;
+    elixirTimer += 0.1f;
     if (elixirTimer >= ELIXIR_REGEN_RATE) {
         elixirTimer = 0;
         if (elixirPlayerOne < MAX_ELIXIR) {
@@ -131,42 +216,6 @@ void Game::updateElixir() {
             elixirPlayerTwo = std::min(MAX_ELIXIR, elixirPlayerTwo + 1.0f);
         }
     }
-}
-
-void Game::render() {
-    // Slow down rendering to about 2.5 FPS to make it easier to see
-    renderCounter++;
-    if (renderCounter % 2 == 0) { 
-        renderer.clear();
-        renderer.drawBoard(board);
-        // The 'isPlayerOneTurn' parameter for drawStatus is no longer relevant, but we pass true as a placeholder
-        renderer.drawStatus(elixirPlayerOne, elixirPlayerTwo, true, gameTimer);
-        renderer.display();
-    }
-}
-
-void Game::spawnTroop(char type, int x, bool isPlayerOne) {
-    EntityType entityType;
-    int health = 0;
-
-    // Randomize spawn position along the width of the board
-    x = 5 + (rand() % (Renderer::BOARD_WIDTH - 10)); 
-    // Set spawn height based on which player is deploying
-    int y = isPlayerOne ? Renderer::BOARD_HEIGHT - 6 : 5;
-    
-    switch (type) {
-        case 'K': entityType = EntityType::KNIGHT; health = 600; break;
-        case 'G': entityType = EntityType::GOLEM; health = 500; break;
-        case 'P': entityType = EntityType::PEKKA; health = 600; break;
-        case 'B': entityType = EntityType::GOBLINS; health = 200; break;
-        case 'D': entityType = EntityType::DRAGON; health = 600; break;
-        case 'W': entityType = EntityType::WIZARD; health = 500; break;
-        case 'A': entityType = EntityType::ARCHERS; health = 120; break;
-        case 'C': entityType = EntityType::CANON; health = 500; y = isPlayerOne ? Renderer::BOARD_HEIGHT - 8 : 7; break; // Canons spawn further back
-        default: return;
-    }
-    
-    board.addEntity(std::make_shared<Entity>(entityType, x, y, isPlayerOne, health));
 }
 
 void Game::handleCombat() {
