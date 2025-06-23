@@ -1,6 +1,5 @@
 #pragma once
 #include "MovableEntity.hpp"
-#include "game.hpp"
 
 class Knight : public MovableEntity {
 public:

@@ -9,6 +9,8 @@
 #include "Canon.hpp"
 #include "Knight.hpp"
 #include "Archers.hpp"
+#include "Goblins.hpp"
+#include "Pekka.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
@@ -192,6 +194,14 @@ void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
         case EntityType::ARCHERS:
             health = 120;
             newTroop = std::make_shared<Archers>(EntityType::ARCHERS, spawnX, spawnY, isPlayerOne, health, lane);
+            break;
+        case EntityType::PEKKA:
+            health = 600;
+            newTroop = std::make_shared<Pekka>(EntityType::PEKKA, spawnX, spawnY, isPlayerOne, health, lane);
+            break;
+        case EntityType::GOBLINS:
+            health = 200;
+            newTroop = std::make_shared<Goblins>(EntityType::GOBLINS, spawnX, spawnY, isPlayerOne, health, lane);
             break;
         default:
             // rest of the troops disabled to avoid compile errors.
