@@ -13,6 +13,7 @@
 #include "Pekka.hpp"
 #include "Wizard.hpp"
 #include "Dragon.hpp"
+#include "Golem.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
@@ -213,8 +214,11 @@ void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
             health = 600;
             newTroop = std::make_shared<Dragon>(EntityType::DRAGON, spawnX, spawnY, isPlayerOne, health, lane);
             break;
+        case EntityType::GOLEM:
+            health = 500;
+            newTroop = std::make_shared<Golem>(EntityType::GOLEM, spawnX, spawnY, isPlayerOne, health, lane);
+            break;
         default:
-            // rest of the troops disabled to avoid compile errors.
             return;
     }
 
