@@ -4,6 +4,9 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include "KingTower.hpp"
+#include "QueenTower.hpp"
+#include "Canon.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
@@ -16,14 +19,14 @@ Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f),
     int p1_king_y = 27, p1_queen_y = 25;
     
     // Initialize Player 2 (AI) towers at the top
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p2_king_y, false, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, 1500));
+    board.addEntity(std::make_shared<KingTower>(EntityType::KING_TOWER, centerX, p2_king_y, false, 4000, Lane::LEFT));
+    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, 1500, Lane::LEFT));
+    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, 1500, Lane::RIGHT));
     
     // Initialize Player 1 (User) towers at the bottom
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p1_king_y, true, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, 1500));
+    board.addEntity(std::make_shared<KingTower>(EntityType::KING_TOWER, centerX, p1_king_y, true, 4000, Lane::LEFT));
+    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, 1500, Lane::LEFT));
+    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, 1500, Lane::RIGHT));
 }
 
 void Game::run() {
@@ -162,6 +165,7 @@ void Game::runAI() {
 }
 
 void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
+    std::shared_ptr<Entity> newTroop = nullptr;
     int health = 0;
     
     int spawnX = 0;
@@ -174,22 +178,19 @@ void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
     int spawnY = isPlayerOne ? (Renderer::BOARD_HEIGHT / 2) + 3 : (Renderer::BOARD_HEIGHT / 2) - 3;
     
     switch (type) {
-        case EntityType::KNIGHT: health = 600; break;
-        case EntityType::GOLEM: health = 500; break;
-        case EntityType::PEKKA: health = 600; break;
-        case EntityType::GOBLINS: health = 200; break;
-        case EntityType::DRAGON: health = 600; break;
-        case EntityType::WIZARD: health = 500; break;
-        case EntityType::ARCHERS: health = 120; break;
         case EntityType::CANON:
             health = 500;
             spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
+            newTroop = std::make_shared<Canon>(type, spawnX, spawnY, isPlayerOne, health, lane);
             break;
-        default: return;
+        default:
+            // For now, nothing for the other troops to avoid compile errors.
+            return;
     }
-    
-    // Correctly uses spawnX and spawnY
-    board.addEntity(std::make_shared<Entity>(type, spawnX, spawnY, isPlayerOne, health));
+
+    if (newTroop) {
+        board.addEntity(newTroop);
+    }
 }
 
 void Game::render() {

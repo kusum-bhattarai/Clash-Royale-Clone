@@ -41,6 +41,9 @@ public:
     char getSymbol() const;
     Lane getLane() const { return m_homeLane; }
 
+    bool canAttackAir() const { return m_canAttackAir; }
+    void setCanAttackAir(bool canAttack) { m_canAttackAir = canAttack; }
+
 protected: // Changed from private to protected so child classes can access them.
     EntityType m_type;
     int m_x, m_y;
