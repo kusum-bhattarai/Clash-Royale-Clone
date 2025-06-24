@@ -1,9 +1,10 @@
-#include "game.hpp"
+#include "core/game.hpp"
 #include <thread>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include "core/EntityFactory.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
@@ -16,14 +17,14 @@ Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f),
     int p1_king_y = 27, p1_queen_y = 25;
     
     // Initialize Player 2 (AI) towers at the top
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p2_king_y, false, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, 1500));
+    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p2_king_y, false, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, Lane::RIGHT));
     
     // Initialize Player 1 (User) towers at the bottom
-    board.addEntity(std::make_shared<Entity>(EntityType::KING_TOWER, centerX, p1_king_y, true, 4000));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, 1500));
-    board.addEntity(std::make_shared<Entity>(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, 1500));
+    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p1_king_y, true, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, Lane::RIGHT));
 }
 
 void Game::run() {
@@ -162,34 +163,14 @@ void Game::runAI() {
 }
 
 void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
-    int health = 0;
-    
-    int spawnX = 0;
-    if (lane == Lane::LEFT) {
-        spawnX = Renderer::BOARD_WIDTH / 4;
-    } else { // Lane::RIGHT
-        spawnX = Renderer::BOARD_WIDTH * 3 / 4;
-    }
-
+    int spawnX = (lane == Lane::LEFT) ? Renderer::BOARD_WIDTH / 4 : Renderer::BOARD_WIDTH * 3 / 4;
     int spawnY = isPlayerOne ? (Renderer::BOARD_HEIGHT / 2) + 3 : (Renderer::BOARD_HEIGHT / 2) - 3;
     
-    switch (type) {
-        case EntityType::KNIGHT: health = 600; break;
-        case EntityType::GOLEM: health = 500; break;
-        case EntityType::PEKKA: health = 600; break;
-        case EntityType::GOBLINS: health = 200; break;
-        case EntityType::DRAGON: health = 600; break;
-        case EntityType::WIZARD: health = 500; break;
-        case EntityType::ARCHERS: health = 120; break;
-        case EntityType::CANON:
-            health = 500;
-            spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
-            break;
-        default: return;
+    if (type == EntityType::CANON) {
+        spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
     }
-    
-    // Correctly uses spawnX and spawnY
-    board.addEntity(std::make_shared<Entity>(type, spawnX, spawnY, isPlayerOne, health));
+
+    board.addEntity(EntityFactory::create(type, spawnX, spawnY, isPlayerOne, lane));
 }
 
 void Game::render() {
