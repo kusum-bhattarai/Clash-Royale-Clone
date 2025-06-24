@@ -158,3 +158,24 @@ TEST(CombatTest, ArcherCanAttackFlyingDragon) {
     // ASSERT: Dragon's health should decrease because the Archer can attack air.
     EXPECT_LT(dragon->getHealth(), dragonInitialHealth);
 }
+
+// Pekka's heavy armor
+TEST(AdvancedCombatTest, PekkaHasDamageResistance) {
+    Board board;
+    auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 10, true, Lane::RIGHT);
+    auto enemyArchers = EntityFactory::create(EntityType::ARCHERS, 10, 15, false, Lane::RIGHT);
+
+    int pekkaInitialHealth = pekka->getHealth();
+    int archerBaseDamage = enemyArchers->getDamage(); // Should be 20
+
+    board.addEntity(pekka);
+    board.addEntity(enemyArchers);
+
+    board.handleCombat();
+    // ASSERT
+    // PEKKA has heavy armor, taking 0.6x damage.
+    // Expected damage taken = floor(20 * 0.6) = 12.
+    int damageTaken = pekkaInitialHealth - pekka->getHealth();
+    EXPECT_LT(damageTaken, archerBaseDamage);
+    EXPECT_GT(damageTaken, 0); 
+}
