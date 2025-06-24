@@ -7,4 +7,5 @@ public:
 
     void calculateStats() override;
     void move(const Board& board) override;
+    char getSymbol() const override { return m_isPlayer ? 'B' : 'b'; }
 };

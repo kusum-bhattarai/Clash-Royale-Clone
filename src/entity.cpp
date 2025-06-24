@@ -66,28 +66,5 @@ std::shared_ptr<Entity> Entity::findTarget(const Board& board) const {
 }
 
 char Entity::getSymbol() const {
-    switch (m_type) {
-        case EntityType::KING_TOWER:
-            return m_isPlayer ? 'T' : 't';
-        case EntityType::QUEEN_TOWER:
-            return m_isPlayer ? 'Q' : 'q';
-        case EntityType::KNIGHT:
-            return m_isPlayer ? 'K' : 'k';
-        case EntityType::GOLEM:
-            return m_isPlayer ? 'G' : 'g';
-        case EntityType::PEKKA:
-            return m_isPlayer ? 'P' : 'p';
-        case EntityType::GOBLINS:
-            return m_isPlayer ? 'B' : 'b';
-        case EntityType::DRAGON:
-            return m_isPlayer ? 'D' : 'd';
-        case EntityType::WIZARD:
-            return m_isPlayer ? 'W' : 'w';
-        case EntityType::ARCHERS:
-            return m_isPlayer ? 'A' : 'a';
-        case EntityType::CANON:
-            return m_isPlayer ? 'C' : 'c';
-        default:
-            return '?';
-    }
+    return '?';
 }

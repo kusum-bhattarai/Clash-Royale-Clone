@@ -38,7 +38,7 @@ public:
     bool isFlying() const { return m_isFlying; }
     int getAttackRange() const { return m_attackRange; }
     int getDamage() const { return m_damage; }
-    char getSymbol() const;
+    virtual char getSymbol() const;
     Lane getLane() const { return m_homeLane; }
 
     bool canAttackAir() const { return m_canAttackAir; }
