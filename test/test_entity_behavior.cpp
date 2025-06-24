@@ -68,3 +68,93 @@ TEST(MovementTest, KnightMovesTowardTarget) {
     EXPECT_EQ(knight->getX(), 10);
     EXPECT_EQ(knight->getY(), 11);
 }
+
+// Test Suite for the main combat logic on the board
+TEST(CombatTest, KnightAttacksEnemyInRange) {
+    Board board;
+    auto playerKnight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+    auto enemyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 11, false, Lane::LEFT);
+    
+    int enemyInitialHealth = enemyKnight->getHealth();
+
+    board.addEntity(playerKnight);
+    board.addEntity(enemyKnight);
+
+    // Act: Running the combat logic
+    board.handleCombat();
+
+    // Assert: Check if the enemy knight has taken damage.
+    // The exact damage depends on calculateDamage logic, but it should be less than its initial health.
+    EXPECT_LT(enemyKnight->getHealth(), enemyInitialHealth);
+    EXPECT_GT(enemyKnight->getHealth(), 0); // To ensure it wasn't a one-hit kill
+}
+
+TEST(CombatTest, KnightDoesNotAttackOutOfRange) {
+    Board board;
+    auto playerKnight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+    auto enemyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 20, false, Lane::LEFT);
+
+    int enemyInitialHealth = enemyKnight->getHealth();
+
+    board.addEntity(playerKnight);
+    board.addEntity(enemyKnight);
+
+    // Act: combat logic in action
+    board.handleCombat();
+
+    // Assert: The enemy's health should be unchanged.
+    EXPECT_EQ(enemyKnight->getHealth(), enemyInitialHealth);
+}
+
+TEST(CombatTest, GolemPrioritizesTowerOverCloserTroop) {
+    // Placing golem in range of both
+    Board board;
+    auto golem = EntityFactory::create(EntityType::GOLEM, 10, 10, true, Lane::LEFT);
+    auto enemyTower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+    auto decoyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 11, false, Lane::LEFT);
+    
+    board.addEntity(golem);
+    board.addEntity(enemyTower);
+    board.addEntity(decoyKnight);
+
+    // ACT: Calling the Golem's findTarget method directly to test its "brain".
+    auto chosenTarget = golem->findTarget(board);
+
+    // ASSERT: The chosen target should not be null and should be the tower.
+    ASSERT_NE(chosenTarget, nullptr);
+    EXPECT_EQ(chosenTarget->getType(), EntityType::QUEEN_TOWER);
+}
+
+TEST(CombatTest, CanonCannotAttackFlyingDragon) {
+    // Placing a dragon in range of a canon.
+    Board board;
+    auto canon = EntityFactory::create(EntityType::CANON, 15, 20, true, Lane::RIGHT);
+    auto dragon = EntityFactory::create(EntityType::DRAGON, 15, 22, false, Lane::RIGHT); // Well within range
+
+    int dragonInitialHealth = dragon->getHealth();
+
+    board.addEntity(canon);
+    board.addEntity(dragon);
+
+    board.handleCombat();
+
+    // ASSERT: Dragon's health should be unchanged because the canon cannot attack air.
+    EXPECT_EQ(dragon->getHealth(), dragonInitialHealth);
+}
+
+TEST(CombatTest, ArcherCanAttackFlyingDragon) {
+    // Placing a dragon in range of an archer.
+    Board board;
+    auto archer = EntityFactory::create(EntityType::ARCHERS, 15, 20, true, Lane::RIGHT);
+    auto dragon = EntityFactory::create(EntityType::DRAGON, 15, 25, false, Lane::RIGHT); // Within Archer's range of 7
+
+    int dragonInitialHealth = dragon->getHealth();
+
+    board.addEntity(archer);
+    board.addEntity(dragon);
+
+    board.handleCombat();
+
+    // ASSERT: Dragon's health should decrease because the Archer can attack air.
+    EXPECT_LT(dragon->getHealth(), dragonInitialHealth);
+}
