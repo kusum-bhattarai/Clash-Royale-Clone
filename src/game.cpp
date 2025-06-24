@@ -4,16 +4,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include "KingTower.hpp"
-#include "QueenTower.hpp"
-#include "Canon.hpp"
-#include "Knight.hpp"
-#include "Archers.hpp"
-#include "Goblins.hpp"
-#include "Pekka.hpp"
-#include "Wizard.hpp"
-#include "Dragon.hpp"
-#include "Golem.hpp"
+#include "EntityFactory.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
@@ -26,14 +17,14 @@ Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f),
     int p1_king_y = 27, p1_queen_y = 25;
     
     // Initialize Player 2 (AI) towers at the top
-    board.addEntity(std::make_shared<KingTower>(EntityType::KING_TOWER, centerX, p2_king_y, false, 4000, Lane::LEFT));
-    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, 1500, Lane::LEFT));
-    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, 1500, Lane::RIGHT));
+    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p2_king_y, false, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, Lane::RIGHT));
     
     // Initialize Player 1 (User) towers at the bottom
-    board.addEntity(std::make_shared<KingTower>(EntityType::KING_TOWER, centerX, p1_king_y, true, 4000, Lane::LEFT));
-    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, 1500, Lane::LEFT));
-    board.addEntity(std::make_shared<QueenTower>(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, 1500, Lane::RIGHT));
+    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p1_king_y, true, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, Lane::LEFT));
+    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, Lane::RIGHT));
 }
 
 void Game::run() {
@@ -172,59 +163,14 @@ void Game::runAI() {
 }
 
 void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
-    std::shared_ptr<Entity> newTroop = nullptr;
-    int health = 0;
-    
-    int spawnX = 0;
-    if (lane == Lane::LEFT) {
-        spawnX = Renderer::BOARD_WIDTH / 4;
-    } else { // Lane::RIGHT
-        spawnX = Renderer::BOARD_WIDTH * 3 / 4;
-    }
-
+    int spawnX = (lane == Lane::LEFT) ? Renderer::BOARD_WIDTH / 4 : Renderer::BOARD_WIDTH * 3 / 4;
     int spawnY = isPlayerOne ? (Renderer::BOARD_HEIGHT / 2) + 3 : (Renderer::BOARD_HEIGHT / 2) - 3;
     
-    switch (type) {
-        case EntityType::CANON:
-            health = 500;
-            spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
-            newTroop = std::make_shared<Canon>(type, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::KNIGHT:
-            health = 600;
-            newTroop = std::make_shared<Knight>(type, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::ARCHERS:
-            health = 120;
-            newTroop = std::make_shared<Archers>(EntityType::ARCHERS, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::PEKKA:
-            health = 600;
-            newTroop = std::make_shared<Pekka>(EntityType::PEKKA, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::GOBLINS:
-            health = 200;
-            newTroop = std::make_shared<Goblins>(EntityType::GOBLINS, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::WIZARD:
-            health = 500;
-            newTroop = std::make_shared<Wizard>(EntityType::WIZARD, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::DRAGON:
-            health = 600;
-            newTroop = std::make_shared<Dragon>(EntityType::DRAGON, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        case EntityType::GOLEM:
-            health = 500;
-            newTroop = std::make_shared<Golem>(EntityType::GOLEM, spawnX, spawnY, isPlayerOne, health, lane);
-            break;
-        default:
-            return;
+    if (type == EntityType::CANON) {
+        spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
     }
 
-    if (newTroop) {
-        board.addEntity(newTroop);
-    }
+    board.addEntity(EntityFactory::create(type, spawnX, spawnY, isPlayerOne, lane));
 }
 
 void Game::render() {
