@@ -7,7 +7,8 @@
 
 enum class Lane {
     LEFT,
-    RIGHT
+    RIGHT,
+    CENTER
 };
 
 enum class GameState {
@@ -18,16 +19,28 @@ enum class GameState {
 class Game {
 public:
     Game();
+    virtual ~Game() = default;
     void run();
+
+    // --- Public Getters for assertions ---
+    bool getIsRunning() const { return isRunning; }
+    float getElixirPlayerOne() const { return elixirPlayerOne; }
+    float getElixirPlayerTwo() const { return elixirPlayerTwo; }
+    Board& getBoard() { return board; }
+
+protected:
+    //for testing
+    virtual void updateElixir();
+    virtual void runAI();
+    virtual void handleCombat();
+    virtual void updateEntities();
+    virtual void checkWinCondition();
 
 private:
     void processInput();
-    void runAI();
     void update();
     void render();
     void spawnTroop(EntityType type, Lane lane, bool isPlayerOne);
-    void handleCombat();
-    void updateElixir();
 
     Board board;
     Renderer renderer;

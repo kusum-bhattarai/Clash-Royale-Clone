@@ -157,3 +157,8 @@ void Board::handleCombat() {
 const std::vector<std::shared_ptr<Entity>>& Board::getEntities() const {
     return entities;
 }
+
+// for testing
+std::vector<std::shared_ptr<Entity>>& Board::getEntities() {
+    return entities;
+}
