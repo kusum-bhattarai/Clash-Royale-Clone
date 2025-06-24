@@ -23,7 +23,10 @@ add_executable(run src/core/main.cpp)
 
 target_link_libraries(run PRIVATE clash_royale_lib)
 
-add_executable(run_tests test/test_entity_f.cpp)
+add_executable(
+    run_tests 
+    test/test_entity_f.cpp
+    test/test_entity_behavior.cpp)
 
 target_link_libraries(run_tests PRIVATE clash_royale_lib gtest_main)
 
