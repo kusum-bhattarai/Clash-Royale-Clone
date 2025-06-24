@@ -1,5 +1,5 @@
-#include "Golem.hpp"
-#include "game.hpp"
+#include "entity/Golem.hpp"
+#include "core/game.hpp"
 
 Golem::Golem(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : TowerPrioritizingEntity(type, x, y, isPlayer, health, lane) {

@@ -1,7 +1,7 @@
-#include "Dragon.hpp"
-#include "game.hpp"
-#include "board.hpp"
-#include "renderer.hpp"
+#include "entity/Dragon.hpp"
+#include "core/game.hpp"
+#include "core/board.hpp"
+#include "core/renderer.hpp"
 #include <memory>
 
 Dragon::Dragon(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)

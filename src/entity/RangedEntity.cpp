@@ -1,5 +1,5 @@
-#include "RangedEntity.hpp"
-#include "board.hpp"
+#include "entity/RangedEntity.hpp"
+#include "core/board.hpp"
 #include <memory> 
 
 void RangedEntity::move(const Board& board) {

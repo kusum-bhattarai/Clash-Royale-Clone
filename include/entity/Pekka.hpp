@@ -1,5 +1,5 @@
 #pragma once
-#include "MovableEntity.hpp"
+#include "entity/MovableEntity.hpp"
 
 class Pekka : public MovableEntity {
 public:

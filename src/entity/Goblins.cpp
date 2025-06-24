@@ -1,7 +1,7 @@
-#include "Goblins.hpp"
-#include "game.hpp"
-#include "board.hpp"
-#include "renderer.hpp"
+#include "entity/Goblins.hpp"
+#include "core/game.hpp"
+#include "core/board.hpp"
+#include "core/renderer.hpp"
 #include <memory>
 
 Goblins::Goblins(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)

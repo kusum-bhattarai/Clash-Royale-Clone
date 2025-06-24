@@ -1,5 +1,5 @@
 #pragma once
-#include "entity.hpp"
+#include "entity/entity.hpp"
 
 // This is an abstract class for any entity that can move.
 class MovableEntity : public Entity {

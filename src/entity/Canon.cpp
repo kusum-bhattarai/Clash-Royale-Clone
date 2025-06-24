@@ -1,4 +1,4 @@
-#include "Canon.hpp"
+#include "entity/Canon.hpp"
 
 Canon::Canon(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : StationaryEntity(type, x, y, isPlayer, health, lane) {

@@ -1,5 +1,5 @@
-#include "Wizard.hpp"
-#include "game.hpp"
+#include "entity/Wizard.hpp"
+#include "core/game.hpp"
 
 Wizard::Wizard(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : RangedEntity(type, x, y, isPlayer, health, lane) {

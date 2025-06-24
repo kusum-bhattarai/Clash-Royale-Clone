@@ -1,5 +1,5 @@
 #pragma once
-#include "MovableEntity.hpp"
+#include "entity/MovableEntity.hpp"
 
 // This is an abstract class for any movable entity that attacks from a distance
 class RangedEntity : public MovableEntity {

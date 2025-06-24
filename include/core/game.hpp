@@ -1,7 +1,7 @@
 #pragma once
-#include "board.hpp"
-#include "renderer.hpp"
-#include "input_handler.hpp"
+#include "core/board.hpp"
+#include "core/renderer.hpp"
+#include "core/input_handler.hpp"
 #include <vector>
 #include <memory>
 

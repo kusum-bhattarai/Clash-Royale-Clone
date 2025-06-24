@@ -1,5 +1,5 @@
 #pragma once
-#include "entity.hpp"
+#include "entity/entity.hpp"
 
 // This class represents the entity that doesnt move
 class StationaryEntity : public Entity {

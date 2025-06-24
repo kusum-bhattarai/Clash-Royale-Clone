@@ -1,5 +1,5 @@
-#include "TowerPrioritizingEntity.hpp"
-#include "board.hpp"
+#include "entity/TowerPrioritizingEntity.hpp"
+#include "core/board.hpp"
 #include <climits> 
 #include <memory>  
 

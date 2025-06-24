@@ -1,4 +1,4 @@
-#include "board.hpp"
+#include "core/board.hpp"
 #include <cmath>
 #include <algorithm>
 #include <climits>

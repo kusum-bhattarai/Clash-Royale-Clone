@@ -1,10 +1,10 @@
-#include "game.hpp"
+#include "core/game.hpp"
 #include <thread>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
-#include "EntityFactory.hpp"
+#include "core/EntityFactory.hpp"
 
 Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
                elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 

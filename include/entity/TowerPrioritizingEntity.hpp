@@ -1,5 +1,5 @@
 #pragma once
-#include "MovableEntity.hpp"
+#include "entity/MovableEntity.hpp"
 
 // This class is for units that ignore other troops and only attack towers.
 class TowerPrioritizingEntity : public MovableEntity {

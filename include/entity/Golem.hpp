@@ -1,5 +1,5 @@
 #pragma once
-#include "TowerPrioritizingEntity.hpp"
+#include "entity/TowerPrioritizingEntity.hpp"
 
 class Golem : public TowerPrioritizingEntity {
 public:

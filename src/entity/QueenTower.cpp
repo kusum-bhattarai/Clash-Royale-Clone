@@ -1,4 +1,4 @@
-#include "QueenTower.hpp"
+#include "entity/QueenTower.hpp"
 
 QueenTower::QueenTower(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : StationaryEntity(type, x, y, isPlayer, health, lane) {

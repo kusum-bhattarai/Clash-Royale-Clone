@@ -1,6 +1,6 @@
-#include "MovableEntity.hpp"
-#include "board.hpp"
-#include "renderer.hpp" 
+#include "entity/MovableEntity.hpp"
+#include "core/board.hpp"
+#include "core/renderer.hpp" 
 
 // This is the standard movement logic for a basic melee troop.
 void MovableEntity::move(const Board& board) {

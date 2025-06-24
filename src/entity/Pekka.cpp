@@ -1,5 +1,5 @@
-#include "Pekka.hpp"
-#include "game.hpp"
+#include "entity/Pekka.hpp"
+#include "core/game.hpp"
 
 Pekka::Pekka(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : MovableEntity(type, x, y, isPlayer, health, lane) {

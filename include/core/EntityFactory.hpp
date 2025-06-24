@@ -1,7 +1,7 @@
 #pragma once
 
-#include "entity.hpp"
-#include "game.hpp"
+#include "entity/entity.hpp"
+#include "core/game.hpp"
 #include <memory>
 
 class EntityFactory {

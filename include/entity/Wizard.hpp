@@ -1,5 +1,5 @@
 #pragma once
-#include "RangedEntity.hpp"
+#include "entity/RangedEntity.hpp"
 
 class Wizard : public RangedEntity {
 public:

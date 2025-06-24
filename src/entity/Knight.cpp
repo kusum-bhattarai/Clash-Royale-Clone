@@ -1,5 +1,5 @@
-#include "Knight.hpp"
-#include "game.hpp"
+#include "entity/Knight.hpp"
+#include "core/game.hpp"
 
 Knight::Knight(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : MovableEntity(type, x, y, isPlayer, health, lane) {

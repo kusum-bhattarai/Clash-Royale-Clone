@@ -1,5 +1,5 @@
 #pragma once
-#include "StationaryEntity.hpp"
+#include "entity/StationaryEntity.hpp"
 
 class QueenTower : public StationaryEntity {
 public:
