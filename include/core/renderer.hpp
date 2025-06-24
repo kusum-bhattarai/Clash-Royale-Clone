@@ -1,5 +1,5 @@
 #pragma once
-#include "board.hpp"
+#include "core/board.hpp"
 #include <string>
 #include <vector>
 
@@ -9,11 +9,12 @@ public:
     void clear();
     void drawBoard(const Board& board);
     void drawStatus(float elixirPlayerOne, float elixirPlayerTwo, bool isPlayerOneTurn, float gameTimer = 0.0f);
+    void drawPrompt(const std::string& message);
     void display();
+    static const int BOARD_WIDTH = 40;
+    static const int BOARD_HEIGHT = 35;
 
 private:
-    static const int BOARD_WIDTH = 30;
-    static const int BOARD_HEIGHT = 30;
     std::vector<std::string> buffer;
     
     void drawHealthBar(int x, int y, int health, int maxHealth);

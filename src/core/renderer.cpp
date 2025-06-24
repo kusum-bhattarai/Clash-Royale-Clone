@@ -1,4 +1,4 @@
-#include "renderer.hpp"
+#include "core/renderer.hpp"
 #include <iostream>
 #include <iomanip>
 
@@ -15,11 +15,8 @@ Renderer::Renderer() {
 }
 
 void Renderer::clear() {
-    // Clear screen and reset cursor
     std::cout << "\033[2J\033[H";
-    // Hide cursor
     std::cout << "\033[?25l";
-    // Reset buffer
     for (auto& row : buffer) {
         row = std::string(BOARD_WIDTH, ' ');
     }
@@ -59,8 +56,7 @@ void Renderer::drawHealthBar(int x, int y, int health, int maxHealth) {
     }
     healthBar += "]";
     
-    // Adjust health bar position to be centered above/below the tower
-    int barX = x - 2;  // Center the health bar
+    int barX = x - 2;
     int barY = (y >= BOARD_HEIGHT - 5) ? y - 1 : y + 1;
     
     if (barX + healthBar.length() <= BOARD_WIDTH && barX >= 0) {
@@ -72,11 +68,11 @@ void Renderer::drawHealthBar(int x, int y, int health, int maxHealth) {
 
 void Renderer::drawStatus(float elixirPlayerOne, float elixirPlayerTwo, bool isPlayerOneTurn, float gameTimer) {
     int timeLeft = static_cast<int>(120 - gameTimer);
-    std::string status = "Time: " + std::to_string(timeLeft) + "s   P1: " + 
+    std::string status = "Time: " + std::to_string(timeLeft) + "s   P1 Elixir: " + 
                         std::to_string(static_cast<int>(elixirPlayerOne)) +
-                        "   P2: " + std::to_string(static_cast<int>(elixirPlayerTwo));
+                        "   P2 Elixir: " + std::to_string(static_cast<int>(elixirPlayerTwo));
     
-    // Center the status
+    // Center the status text
     while (status.length() < BOARD_WIDTH) {
         status = " " + status + " ";
     }
@@ -84,21 +80,23 @@ void Renderer::drawStatus(float elixirPlayerOne, float elixirPlayerTwo, bool isP
         status = status.substr(0, BOARD_WIDTH);
     }
     
-    // Add turn indicator on a separate line
-    std::string turnIndicator = "Current Turn: Player " + std::string(isPlayerOneTurn ? "1" : "2");
-    while (turnIndicator.length() < BOARD_WIDTH) {
-        turnIndicator = " " + turnIndicator + " ";
-    }
-    if (turnIndicator.length() > BOARD_WIDTH) {
-        turnIndicator = turnIndicator.substr(0, BOARD_WIDTH);
-    }
-    
-    buffer[BOARD_HEIGHT - 2] = turnIndicator;
     buffer[BOARD_HEIGHT - 1] = status;
 }
 
+void Renderer::drawPrompt(const std::string& message) {
+    std::string prompt = message;
+    while (prompt.length() < BOARD_WIDTH) {
+        prompt = " " + prompt + " ";
+    }
+    if (prompt.length() > BOARD_WIDTH) {
+        prompt = prompt.substr(0, BOARD_WIDTH);
+    }
+    buffer[BOARD_HEIGHT - 2] = prompt;
+}
+
+
 void Renderer::display() {
-    std::cout << "\033[H";  // Move to top
+    std::cout << "\033[H";
     for (const auto& row : buffer) {
         std::cout << row << "\n";
     }
@@ -111,29 +109,27 @@ void Renderer::display() {
 }
 
 void Renderer::drawBorders() {
-    // Draw top and bottom borders
     for (int x = 0; x < BOARD_WIDTH; x++) {
         buffer[0][x] = '-';
         buffer[BOARD_HEIGHT - 2][x] = '-';
     }
     
-    // Draw side borders and player labels
     for (int y = 0; y < BOARD_HEIGHT - 1; y++) {
         buffer[y][0] = '|';
         buffer[y][BOARD_WIDTH - 1] = '|';
     }
     
-    // Add player labels
-    std::string p1Label = "PLAYER 1";
-    std::string p2Label = "PLAYER 2";
+    // Player 2 is at the top, Player 1 is at the bottom
+    std::string p2Label = "PLAYER 2 (AI)";
+    std::string p1Label = "PLAYER 1 (YOU)";
     
-    // Center the labels
-    int labelPos = (BOARD_WIDTH - p1Label.length()) / 2;
-    for(size_t i = 0; i < p1Label.length(); i++) {
-        buffer[1][labelPos + i] = p1Label[i];
+    int labelPosP2 = (BOARD_WIDTH - p2Label.length()) / 2;
+    for(size_t i = 0; i < p2Label.length(); i++) {
+        buffer[1][labelPosP2 + i] = p2Label[i];
     }
     
-    for(size_t i = 0; i < p2Label.length(); i++) {
-        buffer[BOARD_HEIGHT - 3][labelPos + i] = p2Label[i];
+    int labelPosP1 = (BOARD_WIDTH - p1Label.length()) / 2;
+    for(size_t i = 0; i < p1Label.length(); i++) {
+        buffer[BOARD_HEIGHT - 3][labelPosP1 + i] = p1Label[i];
     }
 }

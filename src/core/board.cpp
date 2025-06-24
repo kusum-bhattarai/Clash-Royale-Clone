@@ -1,12 +1,9 @@
-#include "board.hpp"
+#include "core/board.hpp"
 #include <cmath>
 #include <algorithm>
 #include <climits>
 #include <limits>
 using namespace std;
-
-Board* Board::currentBoard = nullptr;
-std::vector<std::shared_ptr<Entity>> Board::emptyEntities;
 
 void Board::addEntity(std::shared_ptr<Entity> entity) {
     entities.push_back(entity);
@@ -15,7 +12,7 @@ void Board::addEntity(std::shared_ptr<Entity> entity) {
 void Board::updateEntities() {
     for (auto& entity : entities) {
         if (entity->isAlive()) {
-            entity->update();
+            entity->update(*this);
         }
     }
     
@@ -53,6 +50,7 @@ int Board::calculateDamage(const Entity& attacker, const Entity& target) const {
             if (attacker.getType() == EntityType::PEKKA) {
                 multiplier = 1.3f;  // PEKKA deals extra damage to buildings
             }
+        default: 
             break;
     }
 
@@ -74,6 +72,7 @@ int Board::calculateDamage(const Entity& attacker, const Entity& target) const {
                 target.getType() == EntityType::ARCHERS) {
                 multiplier *= 1.1f;  // Goblins deal extra damage to light armor
             }
+        default:
             break;
     }
 

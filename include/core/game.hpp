@@ -1,8 +1,19 @@
 #pragma once
-#include "board.hpp"
-#include "renderer.hpp"
+#include "core/board.hpp"
+#include "core/renderer.hpp"
+#include "core/input_handler.hpp"
 #include <vector>
 #include <memory>
+
+enum class Lane {
+    LEFT,
+    RIGHT
+};
+
+enum class GameState {
+    SELECTING_TROOP,
+    SELECTING_LANE
+};
 
 class Game {
 public:
@@ -11,22 +22,25 @@ public:
 
 private:
     void processInput();
+    void runAI();
     void update();
     void render();
-    void spawnTroop(char type, int x, bool isPlayerOne);
+    void spawnTroop(EntityType type, Lane lane, bool isPlayerOne);
     void handleCombat();
     void updateElixir();
-    void switchTurns();
 
     Board board;
     Renderer renderer;
+    InputHandler inputHandler;
     bool isRunning;
     float elixirPlayerOne;
     float elixirPlayerTwo;
     float elixirTimer;
-    bool isPlayerOneTurn;
     float gameTimer;
-    const float GAME_DURATION = 120.0f; // 2 minutes in seconds
+    int renderCounter; 
+    const float GAME_DURATION = 120.0f;
     const float ELIXIR_REGEN_RATE = 2.8f;
     const float MAX_ELIXIR = 10.0f;
+    GameState currentGameState;
+    EntityType pendingTroopType;
 };
