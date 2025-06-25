@@ -8,6 +8,7 @@ public:
     void addEntity(std::shared_ptr<Entity> entity);
     void updateEntities();
     void handleCombat();
+    std::vector<std::shared_ptr<Entity>>& getEntities();
     const std::vector<std::shared_ptr<Entity>>& getEntities() const;   
     const std::vector<std::shared_ptr<Entity>>& getAllEntities() const {
         return entities;

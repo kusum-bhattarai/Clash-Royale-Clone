@@ -224,3 +224,25 @@ void Game::updateElixir() {
 void Game::handleCombat() {
     board.handleCombat();
 }
+
+// definitions for testing
+void Game::updateEntities() {
+    board.updateEntities();
+}
+
+void Game::checkWinCondition() {
+    bool playerKingAlive = false;
+    bool enemyKingAlive = false;
+    for (const auto& entity : board.getEntities()) {
+        if (entity->getType() == EntityType::KING_TOWER) {
+            if (entity->getIsPlayer()) {
+                if(entity->isAlive()) playerKingAlive = true;
+            } else {
+                if(entity->isAlive()) enemyKingAlive = true;
+            }
+        }
+    }
+    if (!playerKingAlive || !enemyKingAlive || gameTimer >= GAME_DURATION) {
+        isRunning = false;
+    }
+}

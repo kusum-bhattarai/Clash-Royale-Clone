@@ -44,6 +44,9 @@ public:
     bool canAttackAir() const { return m_canAttackAir; }
     void setCanAttackAir(bool canAttack) { m_canAttackAir = canAttack; }
 
+    //test class
+    friend class CombatTest_GolemPrioritizesTowerOverCloserTroop_Test;
+
 protected: // Changed from private to protected so child classes can access them.
     EntityType m_type;
     int m_x, m_y;
