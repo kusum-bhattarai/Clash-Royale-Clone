@@ -2,6 +2,7 @@
 #include "core/board.hpp"
 #include "core/renderer.hpp"
 #include "core/game.hpp" 
+#include <climits>
 
 Entity::Entity(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : m_type(type), m_x(x), m_y(y), m_isPlayer(isPlayer), m_health(health), m_maxHealth(health), 
