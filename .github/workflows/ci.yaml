@@ -1,0 +1,36 @@
+name: C++ CI (macOS & Linux)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    # Check the code
+    - name: Check out repository
+      uses: actions/checkout@v3
+
+    # Create the build directory
+    - name: Create build directory
+      run: cmake -E make_directory ${{github.workspace}}/build
+
+    # Configure the project with CMake
+    - name: Configure CMake
+      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build
+
+    # Build the project
+    - name: Build project
+      run: cmake --build ${{github.workspace}}/build
+
+    # Run the tests
+    - name: Run tests
+      run: ctest --test-dir ${{github.workspace}}/build --verbose
