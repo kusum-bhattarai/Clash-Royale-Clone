@@ -17,7 +17,7 @@ A command-line, simplified clone of the popular strategy game "Clash Royale," bu
 * **Unit Tested:** Features a comprehensive test suite built with the Google Test framework, ensuring the correctness and reliability of core game logic, combat mechanics, and AI behavior.
 
 ## Example gameplay
-<video controls src="Sample_Gameplay.mp4" title="Title" width = "250" height="450"></video>
+<video controls src="SampleGameplay.mp4" title="Gameplay" height="480" width="280"></video>
 
 ## Project Architecture
 
