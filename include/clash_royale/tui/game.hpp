@@ -1,5 +1,6 @@
 #pragma once
 #include "clash_royale/core/types.hpp"
+#include "clash_royale/core/rng.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/tui/renderer.hpp"
 #include "clash_royale/tui/input_handler.hpp"
@@ -40,6 +41,7 @@ private:
     void spawnTroop(EntityType type, Lane lane, bool isPlayerOne);
 
     Board board;
+    Rng rng;
     Renderer renderer;
     InputHandler inputHandler;
     bool isRunning;

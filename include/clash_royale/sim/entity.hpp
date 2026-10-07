@@ -23,6 +23,7 @@ public:
     int getX() const { return m_x; }
     int getY() const { return m_y; }
     int getHealth() const { return m_health; }
+    int getMaxHealth() const { return m_maxHealth; }
     bool getIsPlayer() const { return m_isPlayer; }
     bool isFlying() const { return m_isFlying; }
     int getAttackRange() const { return m_attackRange; }
@@ -45,7 +46,7 @@ protected: // Changed from private to protected so child classes can access them
     float m_moveSpeed;
     int m_health;
     bool m_isPlayer;
-    const int m_maxHealth;
+    int m_maxHealth;
     int m_attackRange;
     int m_damage;
     bool m_isFlying;

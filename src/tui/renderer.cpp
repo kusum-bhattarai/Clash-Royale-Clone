@@ -36,9 +36,11 @@ void Renderer::drawBoard(const Board& board) {
         
         if (x >= 0 && x < kArenaWidth && y >= 0 && y < kArenaHeight) {
             buffer[y][x] = entity->getSymbol();
-            drawHealthBar(x, y + 1, entity->getHealth(), 
-                         entity->getType() == EntityType::KING_TOWER ? 4000 : 
-                         entity->getType() == EntityType::QUEEN_TOWER ? 1500 : 600);
+            // Previously this guessed max health from the entity type, using a
+            // literal 600 for every troop -- so a 200 HP Goblin rendered a bar
+            // that never dropped below two thirds, and a 120 HP Archer's bar
+            // barely moved. Entities know their own maximum.
+            drawHealthBar(x, y + 1, entity->getHealth(), entity->getMaxHealth());
         }
     }
 }

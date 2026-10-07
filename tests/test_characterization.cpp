@@ -18,6 +18,7 @@
 #include <memory>
 #include <string>
 
+#include "clash_royale/core/rng.hpp"
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/entity_factory.hpp"
 #include "clash_royale/sim/board.hpp"
@@ -327,75 +328,107 @@ TEST(BoardBookkeeping, NegativeDamageIsRejectedAndHealthFloorsAtZero) {
 // Combat
 // ---------------------------------------------------------------------------
 
-// There is no attack cooldown: `handleCombat` is called once per 0.1s tick and
-// every in-range entity lands a full hit every single time. A Knight (50 damage)
-// therefore deals 500 damage per second. Phase 2 introduces an `attackSpeed`
-// stat, after which this test must be rewritten to expect ~1 hit per interval.
-TEST(Combat, Bug_EveryEntityAttacksOnEveryTickWithNoCooldown) {
+namespace {
+
+// A board with critical hits switched off, so damage is a single exact number.
+// Under the old global rand() this was impossible: every attack rolled twice
+// and the sequence differed between standard libraries, so tests could only
+// assert ranges or sets of possible values.
+Board deterministicBoard() {
     Board board;
+    board.setCombatRules(CombatRules{/*criticalChance=*/0.0f, /*criticalMultiplier=*/1.5f});
+    return board;
+}
+
+}  // namespace
+
+// There is still no attack cooldown: `handleCombat` is called once per 0.1s tick
+// and every in-range entity lands a full hit every single time, so a Knight
+// deals 500 damage per second. The `attackSpeed` stat that fixes this lands in
+// the next commit, at which point this test is rewritten.
+TEST(Combat, Bug_EveryEntityAttacksOnEveryTickWithNoCooldown) {
+    Board board = deterministicBoard();
     auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 24, true, Lane::LEFT);
     auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
     board.addEntity(knight);
     board.addEntity(tower);
 
+    Rng rng{1};
     const int initial = tower->getHealth();
     const int kTicks = 5;
     for (int i = 0; i < kTicks; ++i) {
-        board.handleCombat();
+        board.handleCombat(rng);
     }
 
-    // A Knight's 50 damage is unmodified against a Queen Tower, and critical
-    // hits can only increase it -- so 5 ticks of combat must remove at least
-    // 5 x 50 HP if and only if every tick produced an attack.
-    const int taken = initial - tower->getHealth();
-    EXPECT_GE(taken, kTicks * 50) << "expected one full hit per tick";
+    // A Knight's 50 damage is unmodified against a Queen Tower, so with crits
+    // off, five ticks of combat removing exactly 250 HP means five attacks.
+    EXPECT_EQ(initial - tower->getHealth(), kTicks * 50) << "expected one full hit per tick";
 }
 
-// `calculateDamage` rolls a 5% critical hit twice (board.cpp:76 and board.cpp:100),
-// each applying a 1.5x multiplier. A double critical therefore yields 2.25x, and
-// the effective crit rate is ~9.75% rather than the intended 5%. Phase 2 removes
-// the duplicate roll.
-//
-// Seeded so the sequence is fixed for a given run; the trial count is set high
-// enough that observing at least one 2.25x hit is overwhelmingly likely on any
-// rand() implementation (p(miss) is on the order of 1e-6).
-TEST(Combat, Bug_CriticalHitIsRolledTwicePerAttack) {
-    std::srand(12345);
+TEST(Combat, CriticalHitAppliesExactlyOnePerAttack) {
+    // Bracketing the probability at 0 and 1 pins the multiplier exactly,
+    // without relying on sampling. A Knight's 50 damage is unmodified against a
+    // Queen Tower, so the only variable is the critical multiplier.
+    struct Case {
+        float chance;
+        int expected;
+    };
+    for (const Case c : {Case{0.0f, 50}, Case{1.0f, 75}}) {
+        SCOPED_TRACE("criticalChance = " + std::to_string(c.chance));
 
-    const int kTrials = 5000;
-    int maxObserved = 0;
-    for (int i = 0; i < kTrials; ++i) {
         Board board;
+        board.setCombatRules(CombatRules{c.chance, 1.5f});
         auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 24, true, Lane::LEFT);
         auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
         board.addEntity(knight);
         board.addEntity(tower);
 
+        Rng rng{1};
         const int initial = tower->getHealth();
-        board.handleCombat();
-        maxObserved = std::max(maxObserved, initial - tower->getHealth());
-    }
+        board.handleCombat(rng);
 
-    // Base 50; single crit floors to 75; double crit floors to 112.
-    EXPECT_EQ(maxObserved, 112) << "expected a reachable 2.25x double-critical hit";
+        // 112 here would mean the 2.25x double-critical has come back.
+        EXPECT_EQ(initial - tower->getHealth(), c.expected);
+    }
 }
 
 TEST(Combat, HeavyArmorReducesIncomingDamage) {
-    Board board;
+    Board board = deterministicBoard();
     auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 10, true, Lane::LEFT);
     auto archers = EntityFactory::create(EntityType::ARCHERS, 10, 12, false, Lane::LEFT);
     board.addEntity(pekka);
     board.addEntity(archers);
 
+    Rng rng{1};
     const int initial = pekka->getHealth();
-    board.handleCombat();
+    board.handleCombat(rng);
 
     // Archers deal 20; PEKKA's heavy armor scales that to floor(20 * 0.6) = 12.
-    // The two independent critical rolls make 18 and 27 reachable as well, so
-    // the full set of outcomes is pinned rather than a single value.
-    const int taken = initial - pekka->getHealth();
-    EXPECT_TRUE(taken == 12 || taken == 18 || taken == 27)
-        << "unexpected damage " << taken << "; heavy armor scaling may have changed";
+    EXPECT_EQ(initial - pekka->getHealth(), 12);
+}
+
+TEST(Combat, SameSeedProducesIdenticalDamage) {
+    // The whole point of owning the generator: a match is reproducible.
+    auto runOnce = [](std::uint64_t seed) {
+        Board board;
+        board.setCombatRules(CombatRules{0.5f, 1.5f});  // crit often, to vary output
+        auto wizard = EntityFactory::create(EntityType::WIZARD, 10, 24, true, Lane::LEFT);
+        auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+        board.addEntity(wizard);
+        board.addEntity(tower);
+
+        Rng rng{seed};
+        std::vector<int> damage;
+        for (int i = 0; i < 20; ++i) {
+            const int before = tower->getHealth();
+            board.handleCombat(rng);
+            damage.push_back(before - tower->getHealth());
+        }
+        return damage;
+    };
+
+    EXPECT_EQ(runOnce(4242), runOnce(4242));
+    EXPECT_NE(runOnce(4242), runOnce(99));
 }
 
 // ---------------------------------------------------------------------------

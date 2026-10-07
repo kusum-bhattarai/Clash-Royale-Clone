@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "clash_royale/core/rng.hpp"
 #include "clash_royale/tui/game.hpp"
 #include "clash_royale/sim/entity_factory.hpp"
 #include "clash_royale/sim/board.hpp"

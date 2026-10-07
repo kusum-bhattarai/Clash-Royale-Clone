@@ -1,17 +1,14 @@
 #include "clash_royale/tui/game.hpp"
 #include <thread>
 #include <chrono>
-#include <cstdlib>
-#include <ctime>
 #include <iostream>
 #include "clash_royale/sim/entity_factory.hpp"
 
 namespace cr {
 
-Game::Game() : isRunning(true), elixirPlayerOne(5.0f), elixirPlayerTwo(5.0f), 
-               elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0), 
+Game::Game() : rng(Rng::fromEntropy()), isRunning(true), elixirPlayerOne(5.0f),
+               elixirPlayerTwo(5.0f), elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0),
                currentGameState(GameState::SELECTING_TROOP) {
-    std::srand(std::time(nullptr));
 
     int centerX = 19;
     int sideOffset = 12;
@@ -139,11 +136,11 @@ void Game::processInput() {
 
 void Game::runAI() {
     if (elixirPlayerTwo >= 3.0f) { 
-        bool shouldDeploy = (rand() % 10) < 3; 
+        bool shouldDeploy = rng.below(10) < 3;
         if (shouldDeploy) {
             EntityType type;
             float cost;
-            int choice = rand() % 8;
+            int choice = static_cast<int>(rng.below(8));
             switch(choice) {
                 case 0: type = EntityType::KNIGHT; cost = 4.0f; break;
                 case 1: type = EntityType::GOLEM; cost = 5.0f; break;
@@ -156,7 +153,7 @@ void Game::runAI() {
             }
             
             if (elixirPlayerTwo >= cost) {
-                Lane aiLane = (rand() % 2 == 0) ? Lane::LEFT : Lane::RIGHT;
+                Lane aiLane = (rng.below(2) == 0) ? Lane::LEFT : Lane::RIGHT;
                 spawnTroop(type, aiLane, false);
                 elixirPlayerTwo -= cost;
             }
@@ -215,7 +212,7 @@ void Game::updateElixir() {
 }
 
 void Game::handleCombat() {
-    board.handleCombat();
+    board.handleCombat(rng);
 }
 
 // definitions for testing

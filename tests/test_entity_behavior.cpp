@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "clash_royale/core/rng.hpp"
 #include "clash_royale/sim/entity_factory.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/sim/entity.hpp"
@@ -83,7 +84,8 @@ TEST(CombatTest, KnightAttacksEnemyInRange) {
     board.addEntity(enemyKnight);
 
     // Act: Running the combat logic
-    board.handleCombat();
+    Rng rng{1};
+    board.handleCombat(rng);
 
     // Assert: Check if the enemy knight has taken damage.
     // The exact damage depends on calculateDamage logic, but it should be less than its initial health.
@@ -102,7 +104,8 @@ TEST(CombatTest, KnightDoesNotAttackOutOfRange) {
     board.addEntity(enemyKnight);
 
     // Act: combat logic in action
-    board.handleCombat();
+    Rng rng{1};
+    board.handleCombat(rng);
 
     // Assert: The enemy's health should be unchanged.
     EXPECT_EQ(enemyKnight->getHealth(), enemyInitialHealth);
@@ -138,7 +141,8 @@ TEST(CombatTest, CanonCannotAttackFlyingDragon) {
     board.addEntity(canon);
     board.addEntity(dragon);
 
-    board.handleCombat();
+    Rng rng{1};
+    board.handleCombat(rng);
 
     // ASSERT: Dragon's health should be unchanged because the canon cannot attack air.
     EXPECT_EQ(dragon->getHealth(), dragonInitialHealth);
@@ -155,7 +159,8 @@ TEST(CombatTest, ArcherCanAttackFlyingDragon) {
     board.addEntity(archer);
     board.addEntity(dragon);
 
-    board.handleCombat();
+    Rng rng{1};
+    board.handleCombat(rng);
 
     // ASSERT: Dragon's health should decrease because the Archer can attack air.
     EXPECT_LT(dragon->getHealth(), dragonInitialHealth);
@@ -173,7 +178,8 @@ TEST(AdvancedCombatTest, PekkaHasDamageResistance) {
     board.addEntity(pekka);
     board.addEntity(enemyArchers);
 
-    board.handleCombat();
+    Rng rng{1};
+    board.handleCombat(rng);
     // ASSERT
     // PEKKA has heavy armor, taking 0.6x damage.
     // Expected damage taken = floor(20 * 0.6) = 12.

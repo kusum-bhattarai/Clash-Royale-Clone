@@ -49,6 +49,7 @@ add_library(cr_core
     src/sim/ranged_entity.cpp
     src/sim/tower_prioritizing_entity.cpp
     src/sim/board.cpp
+    src/sim/combat.cpp
     src/sim/entity_factory.cpp
     src/sim/archers.cpp
     src/sim/canon.cpp
