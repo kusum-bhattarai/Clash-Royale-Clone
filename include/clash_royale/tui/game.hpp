@@ -1,60 +1,53 @@
 #pragma once
-#include "clash_royale/core/types.hpp"
-#include "clash_royale/core/rng.hpp"
-#include "clash_royale/sim/board.hpp"
-#include "clash_royale/tui/renderer.hpp"
+
+#include <string>
+
+#include "clash_royale/ai/random_controller.hpp"
+#include "clash_royale/sim/simulation.hpp"
 #include "clash_royale/tui/input_handler.hpp"
-#include <vector>
-#include <memory>
+#include "clash_royale/tui/renderer.hpp"
 
 namespace cr {
 
+/// Which half of the two-step deploy the player is in.
 enum class GameState {
     SELECTING_TROOP,
-    SELECTING_LANE
+    SELECTING_LANE,
 };
 
+/// The playable terminal game.
+///
+/// This is a front-end and nothing more: it owns a Simulation, polls the
+/// keyboard, draws frames and paces itself with a sleep. All match rules --
+/// elixir, combat, the clock, the win condition -- live in Simulation, which
+/// knows nothing about terminals and can be driven without one.
+///
+/// Game used to hold that state itself and exposed five protected virtuals
+/// purely so a test subclass could reach them. Those are gone: the logic they
+/// guarded is now directly testable through Simulation's public interface.
 class Game {
 public:
-    Game();
-    virtual ~Game() = default;
+    explicit Game(MatchConfig config = {});
+
+    /// Runs the match to completion, or until the player quits.
     void run();
 
-    // --- Public Getters for assertions ---
-    bool getIsRunning() const { return isRunning; }
-    float getElixirPlayerOne() const { return elixirPlayerOne; }
-    float getElixirPlayerTwo() const { return elixirPlayerTwo; }
-    Board& getBoard() { return board; }
-
-protected:
-    //for testing
-    virtual void updateElixir();
-    virtual void runAI();
-    virtual void handleCombat();
-    virtual void updateEntities();
-    virtual void checkWinCondition();
+    Simulation& simulation() { return m_sim; }
+    const Simulation& simulation() const { return m_sim; }
 
 private:
     void processInput();
-    void update();
     void render();
-    void spawnTroop(EntityType type, Lane lane, bool isPlayerOne);
+    void renderFinalFrame();
+    std::string outcomeMessage() const;
 
-    Board board;
-    Rng rng;
-    Renderer renderer;
-    InputHandler inputHandler;
-    bool isRunning;
-    float elixirPlayerOne;
-    float elixirPlayerTwo;
-    float elixirTimer;
-    float gameTimer;
-    int renderCounter; 
-    const float GAME_DURATION = 120.0f;
-    const float ELIXIR_REGEN_RATE = 2.8f;
-    const float MAX_ELIXIR = 10.0f;
-    GameState currentGameState;
-    EntityType pendingTroopType;
+    Simulation m_sim;
+    RandomAiController m_ai;
+    Renderer m_renderer;
+    InputHandler m_input;
+    GameState m_state = GameState::SELECTING_TROOP;
+    EntityType m_pendingTroop = EntityType::KNIGHT;
+    bool m_quitRequested = false;
 };
 
 }  // namespace cr

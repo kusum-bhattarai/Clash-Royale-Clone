@@ -22,7 +22,7 @@
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/entity_factory.hpp"
 #include "clash_royale/sim/board.hpp"
-#include "clash_royale/tui/game.hpp"
+#include "clash_royale/sim/simulation.hpp"
 #include "clash_royale/tui/renderer.hpp"
 #include "clash_royale/sim/knight.hpp"
 #include "clash_royale/sim/entity.hpp"
@@ -62,9 +62,9 @@ TEST(ArenaGeometry, BoardDimensions) {
     EXPECT_EQ(kArenaHeight, 35);
 }
 
-TEST(ArenaGeometry, GameStartsWithSixTowersAtFixedPositions) {
-    Game game;
-    const auto& entities = game.getBoard().getEntities();
+TEST(ArenaGeometry, MatchStartsWithSixTowersAtFixedPositions) {
+    Simulation sim;
+    const auto& entities = sim.board().getEntities();
 
     ASSERT_EQ(entities.size(), 6u);
 
@@ -76,7 +76,7 @@ TEST(ArenaGeometry, GameStartsWithSixTowersAtFixedPositions) {
     // centerX = 19, sideOffset = 12. Note the left queen towers sit at x=6 and
     // the right at x=31 -- 13 and 12 tiles from center respectively. The arena
     // is NOT horizontally symmetric, due to the `- 1 -` in the left-tower
-    // offset in Game's constructor.
+    // offset in Simulation's constructor.
     const Expected expected[] = {
         {EntityType::KING_TOWER, 19, 3, false},
         {EntityType::QUEEN_TOWER, 6, 5, false},
@@ -95,11 +95,11 @@ TEST(ArenaGeometry, GameStartsWithSixTowersAtFixedPositions) {
     }
 }
 
-TEST(ArenaGeometry, GameStartsWithFiveElixirEach) {
-    Game game;
-    EXPECT_FLOAT_EQ(game.getElixirPlayerOne(), 5.0f);
-    EXPECT_FLOAT_EQ(game.getElixirPlayerTwo(), 5.0f);
-    EXPECT_TRUE(game.getIsRunning());
+TEST(ArenaGeometry, MatchStartsWithFiveElixirEach) {
+    Simulation sim;
+    EXPECT_FLOAT_EQ(sim.elixir(true), 5.0f);
+    EXPECT_FLOAT_EQ(sim.elixir(false), 5.0f);
+    EXPECT_TRUE(sim.isRunning());
 }
 
 // ---------------------------------------------------------------------------
@@ -432,44 +432,23 @@ TEST(Combat, SameSeedProducesIdenticalDamage) {
 }
 
 // ---------------------------------------------------------------------------
-// Game loop wiring
+// Deployment geometry
 // ---------------------------------------------------------------------------
 
-namespace {
+TEST(DeploymentGeometry, TroopsSpawnAtTheLaneSpawnPoints) {
+    MatchConfig config;
+    config.deterministic = true;
+    config.seed = 7;
+    Simulation sim{config};
+    const size_t towerCount = sim.board().getEntities().size();
 
-class SpawnProbeGame : public Game {
-public:
-    using Game::runAI;
-};
+    ASSERT_TRUE(sim.deploy(EntityType::ARCHERS, Lane::RIGHT, /*isPlayerOne=*/false));
+    ASSERT_GT(sim.board().getEntities().size(), towerCount);
 
-}  // namespace
-
-TEST(GameLoop, AiTroopsSpawnAtTheLaneSpawnPoints) {
-    SpawnProbeGame game;
-    // Seed *after* construction: Game's constructor calls srand(time(nullptr)),
-    // which would otherwise discard the seed. (Phase 2 replaces global rand()
-    // with an injectable, seedable generator owned by the simulation.)
-    std::srand(7);
-    Board& board = game.getBoard();
-    const size_t towerCount = board.getEntities().size();
-
-    for (int i = 0; i < 2000 && board.getEntities().size() == towerCount; ++i) {
-        game.runAI();
-    }
-    ASSERT_GT(board.getEntities().size(), towerCount) << "AI never deployed";
-
-    // spawnX is BOARD_WIDTH/4 or BOARD_WIDTH*3/4; spawnY for the AI is
-    // BOARD_HEIGHT/2 - 3, shifted two tiles back for a Canon.
-    const auto& spawned = board.getEntities()[towerCount];
-    EXPECT_TRUE(spawned->getX() == 10 || spawned->getX() == 30) << "x = " << spawned->getX();
-    const int expectedY = (spawned->getType() == EntityType::CANON) ? 16 : 14;
-    EXPECT_EQ(spawned->getY(), expectedY);
+    // spawnX is kArenaWidth/4 or kArenaWidth*3/4; spawnY for player two is
+    // kArenaHeight/2 - 3, shifted two tiles back for a Canon.
+    const auto& spawned = sim.board().getEntities()[towerCount];
+    EXPECT_EQ(spawned->getX(), 30);
+    EXPECT_EQ(spawned->getY(), 14);
     EXPECT_FALSE(spawned->getIsPlayer());
 }
-
-// NOTE (no test yet): `Game::checkWinCondition()` correctly detects a destroyed
-// King Tower, but `Game::update()` never calls it -- update() only checks the
-// 120s timer. Destroying a King Tower therefore does NOT end a real game. This
-// cannot be pinned from a test today because `update()` is private and `run()`
-// drives the terminal; Phase 1 makes the loop body reachable and Phase 2 adds
-// the regression test alongside the fix.

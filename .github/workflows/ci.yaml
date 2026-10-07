@@ -49,6 +49,16 @@ jobs:
         cmake --build build-core --parallel
         cmake --install build-core
 
+    - name: Run the full suite with no front-end
+      run: |
+        cmake -S . -B build-headless -DCR_BUILD_TUI=OFF -DCR_BUILD_TESTING=ON
+        cmake --build build-headless --parallel
+        ctest --test-dir build-headless --output-on-failure
+        if [ -e build-headless/clash_royale ] || [ -e build-headless/libclash_royale_tui.a ]; then
+          echo "::error::front-end artifacts were built despite CR_BUILD_TUI=OFF"
+          exit 1
+        fi
+
     - name: Assert GoogleTest was not fetched
       run: |
         if [ -d build-core/_deps ]; then

@@ -109,14 +109,26 @@ target_link_libraries(your_target PRIVATE ClashRoyale::core)
 ```
 
 ```cpp
-#include "clash_royale/sim/board.hpp"
-#include "clash_royale/sim/entity_factory.hpp"
+#include "clash_royale/ai/random_controller.hpp"
+#include "clash_royale/sim/simulation.hpp"
 
-cr::Board board;
-board.addEntity(cr::EntityFactory::create(
-    cr::EntityType::KNIGHT, 10, 10, /*isPlayer=*/true, cr::Lane::LEFT));
-board.updateEntities();   // advance the simulation one tick
+cr::MatchConfig config;
+config.deterministic = true;   // same seed replays the same match, everywhere
+config.seed = 2024;
+
+cr::Simulation sim{config};
+cr::RandomAiController ai;
+
+while (sim.isRunning()) {
+    ai.update(sim, /*isPlayerOne=*/false, cr::kDefaultTimeStep);
+    sim.deploy(cr::EntityType::KNIGHT, cr::Lane::LEFT, /*isPlayerOne=*/true);
+    sim.step(cr::kDefaultTimeStep);   // or any dt you like
+}
 ```
+
+`Simulation` is headless and performs no I/O, so it runs far faster than real
+time -- useful for bots, balance sweeps and training. Plug in your own opponent
+by implementing `cr::AiController`.
 
 Or vendor it directly:
 

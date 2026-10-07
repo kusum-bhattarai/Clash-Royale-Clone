@@ -11,10 +11,10 @@ void Board::addEntity(std::shared_ptr<Entity> entity) {
     entities.push_back(std::move(entity));
 }
 
-void Board::updateEntities() {
+void Board::updateEntities(float dt) {
     for (auto& entity : entities) {
         if (entity->isAlive()) {
-            entity->update(*this);
+            entity->update(*this, dt);
         }
     }
 

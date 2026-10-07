@@ -15,7 +15,9 @@ class Entity {
 public:
     Entity(EntityType type, int x, int y, bool isPlayer, int health, Lane lane);
     virtual ~Entity() = default;
-    virtual void update(const Board& board);
+    /// Advances this entity by `dt` seconds, stepping it once its move timer
+    /// reaches the interval implied by its speed.
+    virtual void update(const Board& board, float dt = kDefaultTimeStep);
     void takeDamage(int damage);
     bool isAlive() const;
 

@@ -20,10 +20,10 @@ Entity::Entity(EntityType type, int x, int y, bool isPlayer, int health, Lane la
 }
 
 // Default update logic, calls the virtual move() function.
-void Entity::update(const Board& board) {
+void Entity::update(const Board& board, float dt) {
     // Check for moveSpeed > 0 so that stationary entities don't waste cycles.
     if (m_moveSpeed > 0.0f) {
-        m_moveTimer += 0.1f;
+        m_moveTimer += dt;
         if (m_moveTimer >= 1.0f / m_moveSpeed) {
             m_moveTimer = 0;
             move(board); 

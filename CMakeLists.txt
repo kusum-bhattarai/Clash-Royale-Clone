@@ -18,13 +18,6 @@ option(CR_BUILD_TUI      "Build the terminal front-end library and playable game
 option(CR_BUILD_TESTING  "Build the test suite (downloads GoogleTest)"            ${PROJECT_IS_TOP_LEVEL})
 option(CR_INSTALL        "Generate install and package-config rules"              ${PROJECT_IS_TOP_LEVEL})
 
-# The suite still covers Game, which lives in cr_tui until the headless
-# Simulation is extracted from it. Until then, testing implies building the TUI.
-if(CR_BUILD_TESTING AND NOT CR_BUILD_TUI)
-    message(STATUS "ClashRoyale: enabling CR_BUILD_TUI; the test suite still covers Game.")
-    set(CR_BUILD_TUI ON)
-endif()
-
 include(GNUInstallDirs)
 
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -50,6 +43,8 @@ add_library(cr_core
     src/sim/tower_prioritizing_entity.cpp
     src/sim/board.cpp
     src/sim/combat.cpp
+    src/sim/simulation.cpp
+    src/ai/random_controller.cpp
     src/sim/entity_factory.cpp
     src/sim/archers.cpp
     src/sim/canon.cpp
@@ -114,10 +109,10 @@ if(CR_BUILD_TESTING)
     add_executable(run_tests
         tests/test_entity_f.cpp
         tests/test_entity_behavior.cpp
-        tests/test_game_logic.cpp
+        tests/test_simulation.cpp
         tests/test_characterization.cpp)
-    # cr_tui links cr_core PUBLIC, so naming both would duplicate the archive.
-    target_link_libraries(run_tests PRIVATE gtest_main $<IF:$<BOOL:${CR_BUILD_TUI}>,cr_tui,cr_core>)
+    # The suite links cr_core only: nothing under tests/ touches the front-end.
+    target_link_libraries(run_tests PRIVATE gtest_main cr_core)
     target_compile_options(run_tests PRIVATE ${CR_WARNINGS})
 
     include(GoogleTest)

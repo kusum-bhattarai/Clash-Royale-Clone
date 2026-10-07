@@ -39,9 +39,10 @@ dragged `<termios.h>` into most of the simulation. Both are now impossible,
 because `cr_core` is a separate build target that CI compiles with the
 front-end switched off.
 
-`Game` still lives in `tui` because it owns a `Renderer` and an `InputHandler`
-alongside the match state. Extracting a headless `Simulation` from it is the
-next step.
+`Game` is now a front-end and nothing more: it owns a `Simulation`, polls the
+keyboard, draws frames and paces itself. Every match rule lives in `cr_core`, so
+the whole test suite builds and runs with the front-end switched off -- which CI
+checks on every push.
 
 ## 3. Class Hierarchy and Design
 
@@ -64,7 +65,20 @@ The entity system is the core of the project, built with a clear inheritance hie
 
 - **Factory Pattern (`EntityFactory`)**: Decouples game logic from concrete entity creation. The `Game` class uses `EntityFactory` to create troops based on `EntityType`, enabling easy addition of new troops.
 - **Template Method Pattern**: The `Entity::update()` method defines a skeleton algorithm (check timer, then move), with subclasses overriding the `move()` step for specific behaviors (e.g., straight, diagonal, zigzag).
-- **Testing Subclass Pattern**: A `TestableGame` subclass exposes protected methods (e.g., `updateElixir()`, `runAI()`) for unit testing, preserving encapsulation of the main `Game` class.
+- **Headless Core**: `Simulation` owns every match rule -- the board, both elixir
+  pools, the clock, the win condition and the random generator -- and performs no
+  I/O. `step(dt)` advances it by an explicit time delta, so it can be driven by
+  the terminal front-end, a test, a bot or a training harness at any rate. The
+  `TestableGame` subclass that previously existed to reach `Game`'s protected
+  methods is gone: there is nothing left to reach around, because the logic is
+  public on a class that needs no terminal.
+- **Strategy Pattern (`AiController`)**: Opponents implement a single `update()`
+  method and act only through `Simulation`'s public interface, so a custom AI
+  cannot cheat. `RandomAiController` is the default and the reference example.
+- **Determinism**: randomness comes from a `cr::Rng` (`std::mt19937`) owned by
+  the simulation, not global `std::rand()`. A `MatchConfig` seed therefore
+  replays a match exactly, on any platform, and two simulations in one process
+  cannot perturb each other.
 
 ## 4. Build and Test System
 

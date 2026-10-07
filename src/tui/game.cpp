@@ -1,240 +1,128 @@
 #include "clash_royale/tui/game.hpp"
-#include <thread>
+
 #include <chrono>
-#include <iostream>
-#include "clash_royale/sim/entity_factory.hpp"
+#include <optional>
+#include <thread>
 
 namespace cr {
+namespace {
 
-Game::Game() : rng(Rng::fromEntropy()), isRunning(true), elixirPlayerOne(5.0f),
-               elixirPlayerTwo(5.0f), elixirTimer(0.0f), gameTimer(0.0f), renderCounter(0),
-               currentGameState(GameState::SELECTING_TROOP) {
-
-    int centerX = 19;
-    int sideOffset = 12;
-    int p2_king_y = 3, p2_queen_y = 5;
-    int p1_king_y = 27, p1_queen_y = 25;
-    
-    // Initialize Player 2 (AI) towers at the top
-    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p2_king_y, false, Lane::LEFT));
-    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p2_queen_y, false, Lane::LEFT));
-    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p2_queen_y, false, Lane::RIGHT));
-    
-    // Initialize Player 1 (User) towers at the bottom
-    board.addEntity(EntityFactory::create(EntityType::KING_TOWER, centerX, p1_king_y, true, Lane::LEFT));
-    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX - 1 - sideOffset, p1_queen_y, true, Lane::LEFT));
-    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, centerX + sideOffset, p1_queen_y, true, Lane::RIGHT));
+/// Maps a keypress to the unit it deploys.
+std::optional<EntityType> troopForKey(char key) {
+    switch (key) {
+        case 'k': return EntityType::KNIGHT;
+        case 'g': return EntityType::GOLEM;
+        case 'p': return EntityType::PEKKA;
+        case 'b': return EntityType::GOBLINS;
+        case 'd': return EntityType::DRAGON;
+        case 'w': return EntityType::WIZARD;
+        case 'a': return EntityType::ARCHERS;
+        case 'c': return EntityType::CANON;
+        default:  return std::nullopt;
+    }
 }
 
-void Game::run() {
-    while (isRunning) {
-        processInput(); // Handle user input
-        update();       // Update game state, including AI moves
-        render();       // Draw the result
+}  // namespace
 
-        if (!isRunning) {
-            // Clear the prompt to avoid clutter
-            renderer.clear();
-            renderer.drawBoard(board);
-            renderer.drawStatus(elixirPlayerOne, elixirPlayerTwo, gameTimer);
-            // Display end message as a prompt
-            std::string endMessage;
-            int p1Health = 0, p2Health = 0;
-            for (const auto& entity : board.getEntities()) {
-                if (entity->getType() == EntityType::KING_TOWER || 
-                    entity->getType() == EntityType::QUEEN_TOWER) {
-                    if (entity->getIsPlayer()) { 
-                        p1Health += entity->getHealth();
-                    } else {
-                        p2Health += entity->getHealth();
-                    }
-                }
-            }
-            if (p1Health > p2Health) {
-                endMessage = "Game Over! Winner: Player 1 (You)!";
-            } else if (p2Health > p1Health) {
-                endMessage = "Game Over! Winner: Player 2 (AI)!";
-            } else {
-                endMessage = "Game Over! It's a draw!";
-            }
-            renderer.drawPrompt(endMessage);
-            renderer.display();
+Game::Game(MatchConfig config) : m_sim(config) {}
+
+void Game::run() {
+    while (m_sim.isRunning() && !m_quitRequested) {
+        processInput();
+        m_ai.update(m_sim, /*isPlayerOne=*/false, kDefaultTimeStep);
+        m_sim.step(kDefaultTimeStep);
+        render();
+
+        if (!m_sim.isRunning() || m_quitRequested) {
             break;
         }
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Game speed
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    renderFinalFrame();
 }
 
 void Game::processInput() {
-    auto input = inputHandler.getInput();
-    if (!input.has_value()) return;
-
-    if (currentGameState == GameState::SELECTING_LANE && (*input == 'x' || *input == 'q')) {
-        currentGameState = GameState::SELECTING_TROOP;
-        if(*input == 'q') isRunning = false;
+    const auto key = m_input.getInput();
+    if (!key.has_value()) {
         return;
     }
 
-    if (currentGameState == GameState::SELECTING_TROOP) {
-        if (*input == 'q') {
-            isRunning = false;
+    if (*key == 'q') {
+        m_quitRequested = true;
+        return;
+    }
+
+    if (m_state == GameState::SELECTING_LANE) {
+        if (*key == 'x') {
+            m_state = GameState::SELECTING_TROOP;
             return;
         }
 
-        EntityType selectedType;
-        float cost = 0;
-
-        switch (*input) {
-            case 'k': selectedType = EntityType::KNIGHT; cost = 4.0f; break;
-            case 'g': selectedType = EntityType::GOLEM; cost = 5.0f; break;
-            case 'p': selectedType = EntityType::PEKKA; cost = 4.0f; break;
-            case 'b': selectedType = EntityType::GOBLINS; cost = 3.0f; break;
-            case 'd': selectedType = EntityType::DRAGON; cost = 5.0f; break;
-            case 'w': selectedType = EntityType::WIZARD; cost = 4.0f; break;
-            case 'a': selectedType = EntityType::ARCHERS; cost = 2.0f; break;
-            case 'c': selectedType = EntityType::CANON; cost = 3.0f; break;
-            default: return;
-        }
-
-        if (elixirPlayerOne >= cost) {
-            pendingTroopType = selectedType;
-            currentGameState = GameState::SELECTING_LANE;
-        }
-
-    } else if (currentGameState == GameState::SELECTING_LANE) {
-        Lane selectedLane;
-        if (*input == 'l') {
-            selectedLane = Lane::LEFT;
-        } else if (*input == 'r') {
-            selectedLane = Lane::RIGHT;
+        Lane lane;
+        if (*key == 'l') {
+            lane = Lane::LEFT;
+        } else if (*key == 'r') {
+            lane = Lane::RIGHT;
         } else {
-            return;
-        }
-        
-        float cost = 0;
-        switch (pendingTroopType) {
-            case EntityType::KNIGHT: cost = 4.0f; break;
-            case EntityType::GOLEM: cost = 5.0f; break;
-            case EntityType::PEKKA: cost = 4.0f; break;
-            case EntityType::GOBLINS: cost = 3.0f; break;
-            case EntityType::DRAGON: cost = 5.0f; break;
-            case EntityType::WIZARD: cost = 4.0f; break;
-            case EntityType::ARCHERS: cost = 2.0f; break;
-            case EntityType::CANON: cost = 3.0f; break;
-            default: break;
+            return;  // ignore anything that is not a lane choice
         }
 
-        if (elixirPlayerOne >= cost) {
-            spawnTroop(pendingTroopType, selectedLane, true);
-            elixirPlayerOne -= cost;
-        }
-        
-        currentGameState = GameState::SELECTING_TROOP;
-    }
-}
-
-void Game::runAI() {
-    if (elixirPlayerTwo >= 3.0f) { 
-        bool shouldDeploy = rng.below(10) < 3;
-        if (shouldDeploy) {
-            EntityType type;
-            float cost;
-            int choice = static_cast<int>(rng.below(8));
-            switch(choice) {
-                case 0: type = EntityType::KNIGHT; cost = 4.0f; break;
-                case 1: type = EntityType::GOLEM; cost = 5.0f; break;
-                case 2: type = EntityType::PEKKA; cost = 4.0f; break;
-                case 3: type = EntityType::GOBLINS; cost = 3.0f; break;
-                case 4: type = EntityType::DRAGON; cost = 5.0f; break;
-                case 5: type = EntityType::WIZARD; cost = 4.0f; break;
-                case 6: type = EntityType::ARCHERS; cost = 2.0f; break;
-                default: type = EntityType::CANON; cost = 3.0f; break;
-            }
-            
-            if (elixirPlayerTwo >= cost) {
-                Lane aiLane = (rng.below(2) == 0) ? Lane::LEFT : Lane::RIGHT;
-                spawnTroop(type, aiLane, false);
-                elixirPlayerTwo -= cost;
-            }
-        }
-    }
-}
-
-void Game::spawnTroop(EntityType type, Lane lane, bool isPlayerOne) {
-    int spawnX = (lane == Lane::LEFT) ? kArenaWidth / 4 : kArenaWidth * 3 / 4;
-    int spawnY = isPlayerOne ? (kArenaHeight / 2) + 3 : (kArenaHeight / 2) - 3;
-    
-    if (type == EntityType::CANON) {
-        spawnY = isPlayerOne ? spawnY - 2 : spawnY + 2;
+        // deploy() checks affordability and spends the elixir itself, so the
+        // cost no longer has to be looked up here. It was previously computed
+        // by a second switch statement that could drift from the first.
+        m_sim.deploy(m_pendingTroop, lane, /*isPlayerOne=*/true);
+        m_state = GameState::SELECTING_TROOP;
+        return;
     }
 
-    board.addEntity(EntityFactory::create(type, spawnX, spawnY, isPlayerOne, lane));
+    const auto troop = troopForKey(*key);
+    if (troop && m_sim.canAfford(*troop, /*isPlayerOne=*/true)) {
+        m_pendingTroop = *troop;
+        m_state = GameState::SELECTING_LANE;
+    }
 }
 
 void Game::render() {
-    renderCounter++;
-    renderer.clear();
-    renderer.drawBoard(board);
-    renderer.drawStatus(elixirPlayerOne, elixirPlayerTwo, gameTimer);
-    if(currentGameState == GameState::SELECTING_LANE) {
-        renderer.drawPrompt("SELECT LANE: (L)eft or (R)ight. (X) to cancel.");
+    m_renderer.clear();
+    m_renderer.drawBoard(m_sim.board());
+    m_renderer.drawStatus(m_sim.elixir(true), m_sim.elixir(false), m_sim.elapsed());
+    if (m_state == GameState::SELECTING_LANE) {
+        m_renderer.drawPrompt("SELECT LANE: (L)eft or (R)ight. (X) to cancel.");
     }
-    renderer.display();
+    m_renderer.display();
 }
 
-void Game::update() {
-    gameTimer += 0.1f;
-    if (gameTimer >= GAME_DURATION) {
-        // The winner is tallied in run(), which renders the result. This branch
-        // previously recomputed both totals and discarded them.
-        isRunning = false;
-        return;
-    }
-    
-    runAI(); // Let the AI make a move
-    updateElixir();
-    board.updateEntities();
-    handleCombat();
+void Game::renderFinalFrame() {
+    m_renderer.clear();
+    m_renderer.drawBoard(m_sim.board());
+    m_renderer.drawStatus(m_sim.elixir(true), m_sim.elixir(false), m_sim.elapsed());
+    m_renderer.drawPrompt(outcomeMessage());
+    m_renderer.display();
 }
 
-void Game::updateElixir() {
-    elixirTimer += 0.1f;
-    if (elixirTimer >= ELIXIR_REGEN_RATE) {
-        elixirTimer = 0;
-        if (elixirPlayerOne < MAX_ELIXIR) {
-            elixirPlayerOne = std::min(MAX_ELIXIR, elixirPlayerOne + 1.0f);
-        }
-        if (elixirPlayerTwo < MAX_ELIXIR) {
-            elixirPlayerTwo = std::min(MAX_ELIXIR, elixirPlayerTwo + 1.0f);
-        }
+std::string Game::outcomeMessage() const {
+    switch (m_sim.result()) {
+        case MatchResult::PLAYER_ONE_WINS:
+            return "Game Over! Winner: Player 1 (You)!";
+        case MatchResult::PLAYER_TWO_WINS:
+            return "Game Over! Winner: Player 2 (AI)!";
+        case MatchResult::DRAW:
+            return "Game Over! It's a draw!";
+        case MatchResult::IN_PROGRESS:
+            break;
     }
-}
 
-void Game::handleCombat() {
-    board.handleCombat(rng);
-}
-
-// definitions for testing
-void Game::updateEntities() {
-    board.updateEntities();
-}
-
-void Game::checkWinCondition() {
-    bool playerKingAlive = false;
-    bool enemyKingAlive = false;
-    for (const auto& entity : board.getEntities()) {
-        if (entity->getType() == EntityType::KING_TOWER) {
-            if (entity->getIsPlayer()) {
-                if(entity->isAlive()) playerKingAlive = true;
-            } else {
-                if(entity->isAlive()) enemyKingAlive = true;
-            }
-        }
+    // Quit mid-match: report who was ahead on tower health, as before.
+    const int one = m_sim.towerHealth(true);
+    const int two = m_sim.towerHealth(false);
+    if (one > two) {
+        return "Match abandoned. Player 1 (You) was ahead.";
     }
-    if (!playerKingAlive || !enemyKingAlive || gameTimer >= GAME_DURATION) {
-        isRunning = false;
+    if (two > one) {
+        return "Match abandoned. Player 2 (AI) was ahead.";
     }
+    return "Match abandoned. Scores were level.";
 }
 
 }  // namespace cr

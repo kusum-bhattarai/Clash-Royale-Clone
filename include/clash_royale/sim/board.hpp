@@ -10,7 +10,7 @@ namespace cr {
 class Board {
 public:
     void addEntity(std::shared_ptr<Entity> entity);
-    void updateEntities();
+    void updateEntities(float dt = kDefaultTimeStep);
     /// Resolves one round of attacks. Randomness is supplied by the caller so
     /// that a match is reproducible from its seed.
     void handleCombat(Rng& rng);
