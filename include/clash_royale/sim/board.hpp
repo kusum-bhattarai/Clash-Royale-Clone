@@ -13,7 +13,7 @@ public:
     void updateEntities(float dt = kDefaultTimeStep);
     /// Resolves one round of attacks. Randomness is supplied by the caller so
     /// that a match is reproducible from its seed.
-    void handleCombat(Rng& rng);
+    void handleCombat(Rng& rng, float dt = kDefaultTimeStep);
 
     void setCombatRules(const CombatRules& rules) { m_combatRules = rules; }
     const CombatRules& combatRules() const { return m_combatRules; }

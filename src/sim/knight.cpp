@@ -10,6 +10,7 @@ Knight::Knight(EntityType type, int x, int y, bool isPlayer, int health, Lane la
 void Knight::calculateStats() {
     m_moveSpeed = 1.0f;
     m_damage = 50;
+    m_attackSpeed = 1.0f / 1.2f;  // 1.2s hit speed
     m_attackRange = 1;
     m_isFlying = false;
     m_canAttackAir = false; 

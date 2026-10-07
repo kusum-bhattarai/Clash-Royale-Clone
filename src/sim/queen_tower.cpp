@@ -10,6 +10,7 @@ QueenTower::QueenTower(EntityType type, int x, int y, bool isPlayer, int health,
 void QueenTower::calculateStats() {
     m_moveSpeed = 0.0f;
     m_damage = 50;
+    m_attackSpeed = 1.0f / 0.8f;  // 0.8s hit speed
     m_attackRange = 5;
     m_isFlying = false;
     m_canAttackAir = true;

@@ -11,6 +11,7 @@ KingTower::KingTower(EntityType type, int x, int y, bool isPlayer, int health, L
 void KingTower::calculateStats() {
     m_moveSpeed = 0.0f;
     m_damage = 75;
+    m_attackSpeed = 1.0f / 1.0f;  // 1.0s hit speed
     m_attackRange = 7;
     m_isFlying = false;
     m_canAttackAir = true;

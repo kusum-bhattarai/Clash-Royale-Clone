@@ -30,6 +30,20 @@ public:
     bool isFlying() const { return m_isFlying; }
     int getAttackRange() const { return m_attackRange; }
     int getDamage() const { return m_damage; }
+
+    /// Attacks per second. Combined with getDamage() this gives the unit's DPS.
+    float getAttackSpeed() const { return m_attackSpeed; }
+
+    /// True when this entity's attack cooldown has elapsed. A freshly created
+    /// entity can attack immediately.
+    bool canAttack() const { return m_attackCooldown <= 0.0f; }
+
+    /// Advances the attack cooldown by `dt`. Called once per combat round for
+    /// every living entity, whether or not it has a target.
+    void tickAttackCooldown(float dt);
+
+    /// Starts the cooldown after an attack lands.
+    void registerAttack();
     virtual char getSymbol() const;
     Lane getLane() const { return m_homeLane; }
 
@@ -51,9 +65,17 @@ protected: // Changed from private to protected so child classes can access them
     int m_maxHealth;
     int m_attackRange;
     int m_damage;
+    float m_attackSpeed;     ///< attacks per second
+    float m_attackCooldown;  ///< seconds until the next attack may land
     bool m_isFlying;
     bool m_canAttackAir;
     Lane m_homeLane;
+
+    /// Number of movement steps taken so far. Subclasses use this to vary
+    /// their movement across steps; it replaces reading m_moveTimer, which is
+    /// always zero inside move().
+    int m_stepCount;
+
     virtual void calculateStats() = 0;
     virtual void move(const Board& board) = 0;
     

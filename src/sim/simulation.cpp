@@ -88,7 +88,7 @@ void Simulation::step(float dt) {
     m_elapsed += dt;
     regenerateElixir(dt);
     m_board.updateEntities(dt);
-    m_board.handleCombat(m_rng);
+    m_board.handleCombat(m_rng, dt);
     evaluateResult();
 }
 

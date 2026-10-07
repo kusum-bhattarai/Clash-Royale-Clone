@@ -6,8 +6,8 @@ namespace cr {
 
 Entity::Entity(EntityType type, int x, int y, bool isPlayer, int health, Lane lane)
     : m_type(type), m_x(x), m_y(y), m_moveTimer(0.0f), m_moveSpeed(0.0f), m_health(health),
-      m_isPlayer(isPlayer), m_maxHealth(health), m_attackRange(1), m_damage(0), m_isFlying(false),
-      m_canAttackAir(false), m_homeLane(lane) {
+      m_isPlayer(isPlayer), m_maxHealth(health), m_attackRange(1), m_damage(0), m_attackSpeed(1.0f),
+      m_attackCooldown(0.0f), m_isFlying(false), m_canAttackAir(false), m_homeLane(lane), m_stepCount(0) {
     if (x < 1 || x >= kArenaWidth - 1 || y < 1 || y >= kArenaHeight - 1) {
         logWarning("Initial position out of bounds, clamping");
         m_x = std::max(1, std::min(x, kArenaWidth - 2));
@@ -26,7 +26,8 @@ void Entity::update(const Board& board, float dt) {
         m_moveTimer += dt;
         if (m_moveTimer >= 1.0f / m_moveSpeed) {
             m_moveTimer = 0;
-            move(board); 
+            move(board);
+            ++m_stepCount;
         }
     }
 }
@@ -40,6 +41,16 @@ void Entity::takeDamage(int damage) {
     if (m_health < 0) {
         m_health = 0;
     }
+}
+
+void Entity::tickAttackCooldown(float dt) {
+    if (m_attackCooldown > 0.0f) {
+        m_attackCooldown -= dt;
+    }
+}
+
+void Entity::registerAttack() {
+    m_attackCooldown = (m_attackSpeed > 0.0f) ? 1.0f / m_attackSpeed : 0.0f;
 }
 
 bool Entity::isAlive() const {

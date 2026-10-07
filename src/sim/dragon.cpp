@@ -12,6 +12,7 @@ Dragon::Dragon(EntityType type, int x, int y, bool isPlayer, int health, Lane la
 void Dragon::calculateStats() {
     m_moveSpeed = 1.5f;
     m_damage = 50;
+    m_attackSpeed = 1.0f / 1.8f;  // 1.8s hit speed
     m_attackRange = 3;
     m_isFlying = true;      // It's a flying unit
     m_canAttackAir = true;

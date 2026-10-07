@@ -29,9 +29,15 @@ void Board::updateEntities(float dt) {
                    entities.end());
 }
 
-void Board::handleCombat(Rng& rng) {
+void Board::handleCombat(Rng& rng, float dt) {
     for (auto& attacker : entities) {
         if (!attacker->isAlive()) {
+            continue;
+        }
+
+        // Cooldowns age for every living entity, in or out of combat.
+        attacker->tickAttackCooldown(dt);
+        if (!attacker->canAttack()) {
             continue;
         }
 
@@ -71,6 +77,7 @@ void Board::handleCombat(Rng& rng) {
 
         if (bestTarget) {
             bestTarget->takeDamage(resolveDamage(*attacker, *bestTarget, m_combatRules, rng));
+            attacker->registerAttack();
         }
     }
 }

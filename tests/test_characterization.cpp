@@ -239,27 +239,28 @@ TEST(MovementShape, UnitsWithNoEnemyOnTheBoardDoNotMove) {
     EXPECT_EQ(knight->getY(), 10);
 }
 
-// `Goblins::move` contains a zigzag branch keyed on `m_moveTimer`, but
-// `Entity::update` zeroes `m_moveTimer` on the line *before* it calls `move()`.
-// The timer is therefore always 0.0 inside `move()`, `movePattern` is always 0,
-// and the even/horizontal-first branch is the only one that has ever run. The
-// odd/vertical-first branch is unreachable dead code.
-//
-// This pins the behavior that actually occurs, not the behavior that was
-// intended. Phase 5 decides whether to restore a real zigzag or drop it.
-TEST(MovementShape, Bug_GoblinZigzagIsUnreachableAndAlwaysMovesHorizontallyFirst) {
+// Goblins alternate which axis they close on. This branch existed from the
+// start but was unreachable: it keyed on `m_moveTimer`, which Entity::update()
+// zeroes immediately before calling move(), so only the horizontal-first case
+// ever ran. It now keys on the movement step count.
+TEST(MovementShape, GoblinsAlternateAxesAsTheyClose) {
     auto goblins = EntityFactory::create(EntityType::GOBLINS, 10, 10, true, Lane::LEFT);
     Board board = boardWith(goblins, EntityType::KNIGHT, 20, 20);
 
-    // A true zigzag would alternate: (11,10) then (11,11) then (12,11)...
-    // Instead every step that has a horizontal component goes horizontal.
-    tick(goblins, board, 9);
+    const int kTicksPerStep = 9;
+
+    // Step 0 is horizontal, step 1 vertical, step 2 horizontal again.
+    tick(goblins, board, kTicksPerStep);
     EXPECT_EQ(goblins->getX(), 11);
     EXPECT_EQ(goblins->getY(), 10);
 
-    tick(goblins, board, 9);
-    EXPECT_EQ(goblins->getX(), 12) << "second step also went horizontal; no alternation";
-    EXPECT_EQ(goblins->getY(), 10);
+    tick(goblins, board, kTicksPerStep);
+    EXPECT_EQ(goblins->getX(), 11) << "second step should have gone vertical";
+    EXPECT_EQ(goblins->getY(), 11);
+
+    tick(goblins, board, kTicksPerStep);
+    EXPECT_EQ(goblins->getX(), 12);
+    EXPECT_EQ(goblins->getY(), 11);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,11 +343,10 @@ Board deterministicBoard() {
 
 }  // namespace
 
-// There is still no attack cooldown: `handleCombat` is called once per 0.1s tick
-// and every in-range entity lands a full hit every single time, so a Knight
-// deals 500 damage per second. The `attackSpeed` stat that fixes this lands in
-// the next commit, at which point this test is rewritten.
-TEST(Combat, Bug_EveryEntityAttacksOnEveryTickWithNoCooldown) {
+// Entities attack on a cooldown derived from their attack speed. Previously
+// there was none: handleCombat() landed a full hit for every in-range entity on
+// every 0.1s tick, so a Knight dealt 500 damage per second instead of ~42.
+TEST(Combat, AttacksAreRateLimitedByAttackSpeed) {
     Board board = deterministicBoard();
     auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 24, true, Lane::LEFT);
     auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
@@ -355,14 +355,56 @@ TEST(Combat, Bug_EveryEntityAttacksOnEveryTickWithNoCooldown) {
 
     Rng rng{1};
     const int initial = tower->getHealth();
-    const int kTicks = 5;
-    for (int i = 0; i < kTicks; ++i) {
-        board.handleCombat(rng);
-    }
 
-    // A Knight's 50 damage is unmodified against a Queen Tower, so with crits
-    // off, five ticks of combat removing exactly 250 HP means five attacks.
-    EXPECT_EQ(initial - tower->getHealth(), kTicks * 50) << "expected one full hit per tick";
+    // A Knight hits every 1.2s. Five 0.1s ticks is 0.5s, so the opening hit
+    // lands and nothing else does.
+    for (int i = 0; i < 5; ++i) {
+        board.handleCombat(rng, 0.1f);
+    }
+    EXPECT_EQ(initial - tower->getHealth(), 50) << "expected exactly one hit inside the cooldown";
+
+    // Carrying on past 1.2s total lets a second hit through.
+    for (int i = 0; i < 9; ++i) {
+        board.handleCombat(rng, 0.1f);
+    }
+    EXPECT_EQ(initial - tower->getHealth(), 100) << "cooldown did not expire on schedule";
+}
+
+TEST(Combat, FirstAttackLandsImmediately) {
+    // Units start ready, so engaging costs no warm-up.
+    Board board = deterministicBoard();
+    auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 24, true, Lane::LEFT);
+    auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+    board.addEntity(pekka);
+    board.addEntity(tower);
+
+    Rng rng{1};
+    const int initial = tower->getHealth();
+    board.handleCombat(rng, 0.1f);
+
+    EXPECT_LT(tower->getHealth(), initial);
+}
+
+TEST(Combat, DamagePerSecondIsIndependentOfTheTimestep) {
+    // The cooldown is measured in seconds, so running at a coarser step must
+    // not change how much damage lands over the same elapsed time.
+    auto damageOverTenSeconds = [](float dt, int steps) {
+        Board board = deterministicBoard();
+        auto archers = EntityFactory::create(EntityType::ARCHERS, 10, 20, true, Lane::LEFT);
+        auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+        board.addEntity(archers);
+        board.addEntity(tower);
+
+        Rng rng{1};
+        const int initial = tower->getHealth();
+        for (int i = 0; i < steps; ++i) {
+            board.handleCombat(rng, dt);
+        }
+        return initial - tower->getHealth();
+    };
+
+    // Archers hit every 1.2s, so ~9 hits land in 10 seconds either way.
+    EXPECT_EQ(damageOverTenSeconds(0.1f, 100), damageOverTenSeconds(0.5f, 20));
 }
 
 TEST(Combat, CriticalHitAppliesExactlyOnePerAttack) {

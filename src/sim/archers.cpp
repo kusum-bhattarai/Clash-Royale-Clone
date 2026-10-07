@@ -10,6 +10,7 @@ Archers::Archers(EntityType type, int x, int y, bool isPlayer, int health, Lane 
 void Archers::calculateStats() {
     m_moveSpeed = 1.2f;
     m_damage = 20;
+    m_attackSpeed = 1.0f / 1.2f;  // 1.2s hit speed
     m_attackRange = 7; 
     m_isFlying = false;
     m_canAttackAir = true; 
