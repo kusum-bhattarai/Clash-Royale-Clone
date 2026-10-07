@@ -27,7 +27,8 @@ add_executable(
     run_tests 
     test/test_entity_f.cpp
     test/test_entity_behavior.cpp
-    test/test_game_logic.cpp)
+    test/test_game_logic.cpp
+    test/test_characterization.cpp)
 
 target_link_libraries(run_tests PRIVATE clash_royale_lib gtest_main)
 
