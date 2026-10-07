@@ -119,8 +119,128 @@ covers the common case, and subclassing stays available for the rest.
   movement and combat. Those previously held independent copies of the policy,
   which is why the Golem's preference had to be special-cased in each.
 
-> **Note:** `Architecture_diagram.png` still shows the old entity hierarchy and
-> needs regenerating.
+### 3.4 Diagrams
+
+GitHub renders these inline; `Architecture_diagram.png` showed the entity
+hierarchy that no longer exists and has been retired in favour of them.
+
+**Module layering.** Arrows point from a module to what it depends on. Nothing
+points upward, which is what lets `cr_core` build with the front-end switched
+off.
+
+```mermaid
+graph TD
+    subgraph tui_target["cr_tui &mdash; optional, POSIX"]
+        TUI["tui/<br/>Renderer, InputHandler, Game"]
+    end
+    subgraph core_target["cr_core &mdash; no I/O, portable"]
+        AI["ai/<br/>AiController<br/>RandomAiController"]
+        SIM["sim/<br/>CardSpec, CardRegistry, Entity<br/>Board, Simulation, combat"]
+        CORE["core/<br/>types, Rng"]
+    end
+
+    APP["apps/tui<br/>clash_royale executable"] --> TUI
+    TUI --> SIM
+    TUI --> AI
+    AI --> SIM
+    SIM --> CORE
+```
+
+**The card model.** A `CardSpec` is the unit of extension; an `Entity` reads
+its stats from one rather than hardcoding them in a subclass.
+
+```mermaid
+classDiagram
+    direction LR
+
+    class CardSpec {
+        +string id
+        +char symbol
+        +int health
+        +int damage
+        +int attackRange
+        +float moveSpeed
+        +float attackSpeed
+        +float elixirCost
+        +MovementDomain domain
+        +MovementStyle movement
+        +ArmorClass armor
+        +float incomingDamageMultiplier
+        +TargetFilter targets
+        +DamageModifier[] damageModifiers
+        +TowerRole towerRole
+        +factory
+    }
+
+    class CardRegistry {
+        +withDefaultCards() CardRegistry
+        +define(CardSpec) CardSpec
+        +get(id) CardSpec
+        +find(id) CardSpec
+        +deployable() CardSpec[]
+    }
+
+    class Entity {
+        +update(Board, dt)
+        +findTarget(Board) Entity
+        +canTarget(Entity) bool
+        +takeDamage(int)
+        #move(Board)
+    }
+
+    class Board {
+        +updateEntities(dt)
+        +handleCombat(Rng, dt)
+    }
+
+    class Simulation {
+        +step(dt)
+        +deploy(cardId, Lane, isPlayerOne) bool
+        +canAfford(cardId, isPlayerOne) bool
+        +result() MatchResult
+        +towerHealth(isPlayerOne) int
+    }
+
+    class AiController {
+        <<interface>>
+        +update(Simulation, isPlayerOne, dt)
+    }
+
+    class RandomAiController
+
+    CardRegistry "1" *-- "many" CardSpec : owns, stable addresses
+    Entity ..> CardSpec : reads stats from
+    Board "1" o-- "many" Entity
+    Simulation *-- Board
+    Simulation *-- CardRegistry
+    RandomAiController ..|> AiController
+    AiController ..> Simulation : acts only through
+```
+
+**One simulation step.** `step(dt)` is the whole match loop; a front-end adds
+only input and rendering around it.
+
+```mermaid
+flowchart TD
+    START(["step(dt)"]) --> RUNNING{"match still<br/>running?"}
+    RUNNING -- no --> NOOP(["return unchanged"])
+    RUNNING -- yes --> CLOCK["advance clock by dt"]
+    CLOCK --> ELIXIR["regenerate elixir<br/>(loops if dt spans<br/>several intervals)"]
+    ELIXIR --> ENTITIES["Board::updateEntities(dt)"]
+    ENTITIES --> MOVE["per entity: accumulate move timer,<br/>then move() per MovementStyle"]
+    MOVE --> REAP["reap dead troops<br/>(towers retained for scoring)"]
+    REAP --> COMBAT["Board::handleCombat(rng, dt)"]
+    COMBAT --> COOL["per entity: age attack cooldown"]
+    COOL --> TARGET["findTarget() via TargetFilter,<br/>then range check"]
+    TARGET --> DMG["resolveDamage():<br/>modifiers, armor, one crit roll"]
+    DMG --> WIN["evaluate win condition"]
+    WIN --> KING{"a King Tower<br/>destroyed?"}
+    KING -- yes --> OVER(["match over"])
+    KING -- no --> TIME{"clock expired?"}
+    TIME -- yes --> TIEBREAK["decide on tower health"]
+    TIEBREAK --> OVER
+    TIME -- no --> CONT(["continue"])
+```
 
 ## 4. Build and Test System
 
