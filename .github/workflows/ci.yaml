@@ -8,29 +8,85 @@ on:
 
 jobs:
   build-and-test:
+    name: Build & test (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    # Check the code
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    # Create the build directory
-    - name: Create build directory
-      run: cmake -E make_directory ${{github.workspace}}/build
+    - name: Configure
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # Configure the project with CMake
-    - name: Configure CMake
-      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build
+    - name: Build
+      run: cmake --build build --parallel
 
-    # Build the project
-    - name: Build project
-      run: cmake --build ${{github.workspace}}/build
-
-    # Run the tests
     - name: Run tests
-      run: ctest --test-dir ${{github.workspace}}/build --verbose
+      run: ctest --test-dir build --output-on-failure
+
+  # Guards the layering split: cr_core must build with no front-end, no
+  # GoogleTest download and no POSIX terminal dependencies, then install and be
+  # consumable through find_package by a project that knows nothing about us.
+  core-is-standalone:
+    name: Core builds, installs and is consumable
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Build and install cr_core alone
+      run: |
+        cmake -S . -B build-core \
+          -DCR_BUILD_TUI=OFF \
+          -DCR_BUILD_TESTING=OFF \
+          -DCMAKE_INSTALL_PREFIX="$PWD/prefix"
+        cmake --build build-core --parallel
+        cmake --install build-core
+
+    - name: Assert GoogleTest was not fetched
+      run: |
+        if [ -d build-core/_deps ]; then
+          echo "::error::GoogleTest was downloaded despite CR_BUILD_TESTING=OFF"
+          exit 1
+        fi
+
+    - name: Assert no POSIX terminal headers leak out of the core
+      run: |
+        printf '#include "clash_royale/sim/entity_factory.hpp"\n#include "clash_royale/sim/board.hpp"\nint main(){}\n' > probe.cpp
+        g++ -std=c++20 -Iinclude -H -fsyntax-only probe.cpp 2> deps.txt
+        if grep -qE 'termios|sys/select' deps.txt; then
+          echo "::error::a core header reaches terminal I/O"
+          grep -E 'termios|sys/select' deps.txt
+          exit 1
+        fi
+
+    - name: Consume the installed package from a separate project
+      run: |
+        mkdir -p consumer && cd consumer
+        cat > CMakeLists.txt <<'EOF'
+        cmake_minimum_required(VERSION 3.16)
+        project(Downstream LANGUAGES CXX)
+        find_package(ClashRoyale REQUIRED)
+        add_executable(downstream main.cpp)
+        target_link_libraries(downstream PRIVATE ClashRoyale::core)
+        EOF
+        cat > main.cpp <<'EOF'
+        #include "clash_royale/sim/board.hpp"
+        #include "clash_royale/sim/entity_factory.hpp"
+        int main() {
+            cr::Board board;
+            board.addEntity(cr::EntityFactory::create(
+                cr::EntityType::KNIGHT, 10, 10, true, cr::Lane::LEFT));
+            board.updateEntities();
+            return board.getEntities().size() == 1 ? 0 : 1;
+        }
+        EOF
+        cmake -S . -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/prefix"
+        cmake --build build
+        ./build/downstream

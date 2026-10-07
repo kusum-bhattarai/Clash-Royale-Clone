@@ -16,14 +16,32 @@ The project adheres to the following principles to ensure a robust, maintainable
 
 The project follows a professional directory layout to separate interfaces from implementations:
 
-- **`include/`**: Contains public-facing header files (`.hpp`).
-  - `core/`: Headers for core systems (`Game`, `Board`, `EntityFactory`).
-  - `entity/`: Headers for the base `Entity` class and its subclasses (e.g., `Knight.hpp`, `Dragon.hpp`).
-- **`src/`**: Contains implementation source files (`.cpp`).
-  - `core/`: Implementations for core game systems.
-  - `entity/`: Implementations for entity classes.
-- **`test/`**: Contains unit test source files using the Google Test framework.
-- **`CMakeLists.txt`**: Root build script defining targets, dependencies, and project settings.
+Everything is under the `cr` namespace, and public headers are rooted at
+`include/clash_royale/` so downstream includes are unambiguous.
+
+- **`include/clash_royale/`**: Public headers.
+  - `core/`: Shared vocabulary with no dependencies (`Lane`, `EntityType`, arena dimensions).
+  - `sim/`: The simulation -- `Entity` and its subclasses, `Board`, `EntityFactory`.
+  - `tui/`: The terminal front-end -- `Renderer`, `InputHandler`, `Game`.
+- **`src/`**: Implementations, mirroring the header layout.
+- **`apps/tui/`**: The playable terminal game, a thin `main` over `cr_tui`.
+- **`tests/`**: Unit and characterization tests using GoogleTest.
+- **`cmake/`**: The package-config template used to generate `ClashRoyaleConfig.cmake`.
+- **`CMakeLists.txt`**: Root build script defining targets, options and install rules.
+
+### 2.1 Layering
+
+`core` depends on nothing, `sim` depends on `core`, and `tui` depends on both.
+Nothing flows the other way. Two inversions in the original layout have been
+removed: entities previously read arena dimensions off the `Renderer`, and
+`EntityFactory` included the whole `Game` header merely to see `Lane` -- which
+dragged `<termios.h>` into most of the simulation. Both are now impossible,
+because `cr_core` is a separate build target that CI compiles with the
+front-end switched off.
+
+`Game` still lives in `tui` because it owns a `Renderer` and an `InputHandler`
+alongside the match state. Extracting a headless `Simulation` from it is the
+next step.
 
 ## 3. Class Hierarchy and Design
 
@@ -50,6 +68,6 @@ The entity system is the core of the project, built with a clear inheritance hie
 
 ## 4. Build and Test System
 
-- **CMake**: Manages the build process, creating a static library (`clash_royale_lib`) for core logic, linked to the main executable (`run`) and test executable (`run_tests`). This ensures scalability and efficiency.
+- **CMake**: Builds two static libraries -- `cr_core` (simulation) and the optional `cr_tui` (terminal front-end) -- exported as `ClashRoyale::core` and `ClashRoyale::tui`. These link into the `clash_royale` executable and the `run_tests` suite. Install rules and a generated `ClashRoyaleConfig.cmake` let downstream projects consume the library through `find_package`.
 - **Google Test**: Unit tests use the Google Test framework, automatically configured via CMake’s `FetchContent`. Tests are executed using the `ctest` command, ensuring seamless dependency management and test execution.
 

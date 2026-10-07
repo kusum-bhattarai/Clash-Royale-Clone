@@ -1,6 +1,6 @@
 # Clash Royale Clone
 
-![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![CMake](https://img.shields.io/badge/build-CMake-green.svg)
 ![GoogleTest](https://img.shields.io/badge/tested%20with-GoogleTest-red.svg)
 
@@ -24,15 +24,26 @@ A command-line, simplified clone of the popular strategy game "Clash Royale," bu
 This project is organized into a clean, library-first architecture that separates concerns and promotes modularity.
 ```
 Clash-Royale-Clone/
-├── include/            # Header files (public interfaces)
-│   ├── core/
-│   └── entity/
-├── src/                # Source files (private implementations)
-│   ├── core/
-│   └── entity/
-├── test/               # All unit tests for the project
-└── CMakeLists.txt      # The main CMake build script
+├── include/clash_royale/   # Public headers, all under namespace `cr`
+│   ├── core/               # Shared vocabulary (Lane, EntityType, arena size)
+│   ├── sim/                # Simulation: entities, board, factory
+│   └── tui/                # Terminal front-end: renderer, input, game loop
+├── src/                    # Implementations, mirroring the above
+├── apps/tui/               # The playable terminal game
+├── tests/                  # Unit and characterization tests
+├── cmake/                  # Package-config template
+└── CMakeLists.txt
 ```
+
+The build produces two libraries:
+
+| Target | Alias | Contents |
+| --- | --- | --- |
+| `cr_core` | `ClashRoyale::core` | The simulation. No I/O, no platform dependencies, builds anywhere. |
+| `cr_tui` | `ClashRoyale::tui` | POSIX terminal rendering and input. Optional. |
+
+The split is enforced in CI: `cr_core` must build with the front-end disabled,
+and no core header may reach terminal I/O.
 
 For more details, checkout [Documentation](Architecture_documentation.md).
 
@@ -41,9 +52,21 @@ For more details, checkout [Documentation](Architecture_documentation.md).
 This project uses CMake to handle the build process. Google Test is automatically downloaded as a dependency.
 
 ### Prerequisites
-* A C++17 compatible compiler (g++, Clang, etc.)
-* CMake (version 3.10 or higher)
+* A C++20 compatible compiler (g++, Clang, etc.)
+* CMake (version 3.16 or higher)
 * Git
+
+### Build Options
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `CR_BUILD_TUI` | on at top level | Build the terminal front-end and the playable game |
+| `CR_BUILD_TESTING` | on at top level | Build the tests (downloads GoogleTest) |
+| `CR_INSTALL` | on at top level | Generate install and package-config rules |
+
+All three default to off when the project is consumed via `add_subdirectory` or
+`FetchContent`, so embedding the library does not pull GoogleTest into your
+build or compile terminal code you cannot run.
 
 ### Build Instructions
 
@@ -68,12 +91,42 @@ This project uses CMake to handle the build process. Google Test is automaticall
     ```bash
     cmake --build .
     ```
-    This will create two executables inside the `build` directory: `run` (the game) and `run_tests` (the test suite).
+    This will create two executables inside the `build` directory: `clash_royale` (the game) and `run_tests` (the test suite).
 
 ### Running the Game
-To play the game, run the `run` executable from the `build` directory:
+To play the game, run the `clash_royale` executable from the `build` directory:
 ```bash
-./run
+./clash_royale
+```
+
+## Using It as a Library
+
+Install it, then consume the package from any CMake project:
+
+```cmake
+find_package(ClashRoyale REQUIRED)
+target_link_libraries(your_target PRIVATE ClashRoyale::core)
+```
+
+```cpp
+#include "clash_royale/sim/board.hpp"
+#include "clash_royale/sim/entity_factory.hpp"
+
+cr::Board board;
+board.addEntity(cr::EntityFactory::create(
+    cr::EntityType::KNIGHT, 10, 10, /*isPlayer=*/true, cr::Lane::LEFT));
+board.updateEntities();   // advance the simulation one tick
+```
+
+Or vendor it directly:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(ClashRoyale
+  GIT_REPOSITORY https://github.com/kusum-bhattarai/Clash-Royale-Clone.git
+  GIT_TAG main)
+FetchContent_MakeAvailable(ClashRoyale)
+target_link_libraries(your_target PRIVATE ClashRoyale::core)
 ```
 
 ### Running the Tests
