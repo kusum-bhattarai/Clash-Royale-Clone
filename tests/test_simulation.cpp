@@ -11,10 +11,11 @@
 #include <vector>
 
 #include "clash_royale/ai/random_controller.hpp"
-#include "clash_royale/sim/entity_factory.hpp"
+#include "test_helpers.hpp"
 #include "clash_royale/sim/simulation.hpp"
 
 using namespace cr;
+using namespace cr::testing;
 
 namespace {
 
@@ -29,7 +30,7 @@ MatchConfig seededConfig(std::uint64_t seed = 1234) {
 
 std::shared_ptr<Entity> findKingTower(Simulation& sim, bool isPlayerOne) {
     for (const auto& entity : sim.board().getEntities()) {
-        if (entity->getType() == EntityType::KING_TOWER && entity->getIsPlayer() == isPlayerOne) {
+        if (entity->cardId() == cards::KingTower && entity->getIsPlayer() == isPlayerOne) {
             return entity;
         }
     }
@@ -123,7 +124,7 @@ TEST(SimulationElixir, MovementAlsoHonoursTheTimestep) {
     auto knightPositionAfterOneSecond = [](float dt, int steps) {
         MatchConfig config = seededConfig();
         Simulation sim{config};
-        sim.deploy(EntityType::KNIGHT, Lane::LEFT, true);
+        sim.deploy(cards::Knight, Lane::LEFT, true);
         auto knight = sim.board().getEntities().back();
         const int startY = knight->getY();
         for (int i = 0; i < steps; ++i) {
@@ -145,20 +146,20 @@ TEST(SimulationDeploy, SpendsElixirAndPlacesTheUnit) {
     Simulation sim{seededConfig()};
     const size_t before = sim.board().getEntities().size();
 
-    ASSERT_TRUE(sim.deploy(EntityType::ARCHERS, Lane::LEFT, true));
+    ASSERT_TRUE(sim.deploy(cards::Archers, Lane::LEFT, true));
 
     EXPECT_EQ(sim.board().getEntities().size(), before + 1);
-    EXPECT_FLOAT_EQ(sim.elixir(true), 5.0f - elixirCost(EntityType::ARCHERS));
+    EXPECT_FLOAT_EQ(sim.elixir(true), 5.0f - sim.cards().get(cards::Archers).elixirCost);
     EXPECT_FLOAT_EQ(sim.elixir(false), 5.0f) << "deploying must not touch the opponent's elixir";
 }
 
 TEST(SimulationDeploy, RefusesWhatThePlayerCannotAfford) {
     Simulation sim{seededConfig()};
     // A Golem costs 5, so two of them cannot both be afforded from 5 elixir.
-    ASSERT_TRUE(sim.deploy(EntityType::GOLEM, Lane::LEFT, true));
+    ASSERT_TRUE(sim.deploy(cards::Golem, Lane::LEFT, true));
     const size_t after = sim.board().getEntities().size();
 
-    EXPECT_FALSE(sim.deploy(EntityType::GOLEM, Lane::LEFT, true));
+    EXPECT_FALSE(sim.deploy(cards::Golem, Lane::LEFT, true));
     EXPECT_EQ(sim.board().getEntities().size(), after) << "a refused deploy must change nothing";
     EXPECT_FLOAT_EQ(sim.elixir(true), 0.0f);
 }
@@ -166,13 +167,13 @@ TEST(SimulationDeploy, RefusesWhatThePlayerCannotAfford) {
 TEST(SimulationDeploy, PlacesUnitsAtTheLaneSpawnPoints) {
     Simulation sim{seededConfig()};
 
-    ASSERT_TRUE(sim.deploy(EntityType::KNIGHT, Lane::LEFT, true));
+    ASSERT_TRUE(sim.deploy(cards::Knight, Lane::LEFT, true));
     const auto& knight = sim.board().getEntities().back();
     EXPECT_EQ(knight->getX(), kArenaWidth / 4);
     EXPECT_EQ(knight->getY(), (kArenaHeight / 2) + 3);
 
     Simulation other{seededConfig()};
-    ASSERT_TRUE(other.deploy(EntityType::CANON, Lane::RIGHT, false));
+    ASSERT_TRUE(other.deploy(cards::Canon, Lane::RIGHT, false));
     const auto& canon = other.board().getEntities().back();
     EXPECT_EQ(canon->getX(), kArenaWidth * 3 / 4);
     // Buildings are placed two tiles behind the troop spawn line.
@@ -182,11 +183,11 @@ TEST(SimulationDeploy, PlacesUnitsAtTheLaneSpawnPoints) {
 TEST(SimulationDeploy, ElixirCostsAreSingleSourced) {
     // These were previously spread across three switch statements that could
     // disagree. Spot-check that the one remaining table is the one in use.
-    for (EntityType type : {EntityType::ARCHERS, EntityType::GOBLINS, EntityType::KNIGHT, EntityType::GOLEM}) {
+    for (std::string_view card : {cards::Archers, cards::Goblins, cards::Knight, cards::Golem}) {
         Simulation fresh{seededConfig()};
         const float before = fresh.elixir(true);
-        ASSERT_TRUE(fresh.deploy(type, Lane::LEFT, true));
-        EXPECT_FLOAT_EQ(before - fresh.elixir(true), elixirCost(type));
+        ASSERT_TRUE(fresh.deploy(card, Lane::LEFT, true));
+        EXPECT_FLOAT_EQ(before - fresh.elixir(true), fresh.cards().get(card).elixirCost);
     }
 }
 
@@ -208,7 +209,7 @@ TEST(SimulationWinCondition, DestroyingTheKingTowerEndsTheMatchFromStepAlone) {
 
     // A PEKKA adjacent to the weakened tower finishes it in a single hit.
     sim.board().addEntity(
-        EntityFactory::create(EntityType::PEKKA, enemyKing->getX(), enemyKing->getY() + 1, true, Lane::LEFT));
+        spawn(cards::Pekka, enemyKing->getX(), enemyKing->getY() + 1, true, Lane::LEFT));
 
     ASSERT_TRUE(sim.isRunning());
     sim.step();

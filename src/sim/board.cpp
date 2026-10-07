@@ -19,12 +19,10 @@ void Board::updateEntities(float dt) {
     }
 
     // Dead towers are deliberately retained so win conditions can still read
-    // their health; only troops are reaped.
+    // their health; only troops and ordinary buildings are reaped.
     entities.erase(std::remove_if(entities.begin(), entities.end(),
                                   [](const std::shared_ptr<Entity>& e) {
-                                      return !e->isAlive() &&
-                                             e->getType() != EntityType::KING_TOWER &&
-                                             e->getType() != EntityType::QUEEN_TOWER;
+                                      return !e->isAlive() && e->spec().towerRole == TowerRole::None;
                                   }),
                    entities.end());
 }
@@ -41,44 +39,19 @@ void Board::handleCombat(Rng& rng, float dt) {
             continue;
         }
 
-        // Pick the nearest valid enemy within reach. Note this duplicates the
-        // targeting policy in Entity::findTarget rather than reusing it, which
-        // is why the Golem's building preference has to be special-cased here
-        // as well. Unifying the two behind the card registry's target
-        // preference is a later change.
-        std::shared_ptr<Entity> bestTarget = nullptr;
-        int minDistance = INT_MAX;
-
-        for (auto& target : entities) {
-            if (!target->isAlive() || target->getIsPlayer() == attacker->getIsPlayer()) {
-                continue;
-            }
-            if (target->isFlying() && !attacker->canAttackAir()) {
-                continue;
-            }
-            if (!isWithinRange(*attacker, *target, attacker->getAttackRange())) {
-                continue;
-            }
-
-            if (attacker->getType() == EntityType::GOLEM &&
-                target->getType() != EntityType::KING_TOWER &&
-                target->getType() != EntityType::QUEEN_TOWER &&
-                target->getType() != EntityType::CANON) {
-                continue;
-            }
-
-            const int distance = std::abs(attacker->getX() - target->getX()) +
-                                 std::abs(attacker->getY() - target->getY());
-            if (distance < minDistance) {
-                minDistance = distance;
-                bestTarget = target;
-            }
+        // Targeting is delegated to the entity rather than reimplemented here.
+        // This loop used to carry its own copy of the policy -- including a
+        // hardcoded special case for the Golem's building preference -- which
+        // could drift from Entity::findTarget. Since findTarget returns the
+        // *nearest* admissible enemy, no closer in-range target can exist, so
+        // a single range check is sufficient.
+        const std::shared_ptr<Entity> target = attacker->findTarget(*this);
+        if (!target || !isWithinRange(*attacker, *target, attacker->getAttackRange())) {
+            continue;
         }
 
-        if (bestTarget) {
-            bestTarget->takeDamage(resolveDamage(*attacker, *bestTarget, m_combatRules, rng));
-            attacker->registerAttack();
-        }
+        target->takeDamage(resolveDamage(*attacker, *target, m_combatRules, rng));
+        attacker->registerAttack();
     }
 }
 

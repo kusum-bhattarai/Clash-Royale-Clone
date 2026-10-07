@@ -39,23 +39,4 @@ enum class Lane {
     CENTER,
 };
 
-/// Identifies a kind of troop or building.
-///
-/// This fixed enumeration is why adding a unit currently means editing the
-/// factory and both damage-modifier switches. A later change replaces it with a
-/// data-driven card registry so downstream users can define units without
-/// modifying the library.
-enum class EntityType {
-    KING_TOWER,
-    QUEEN_TOWER,
-    KNIGHT,
-    GOLEM,
-    PEKKA,
-    GOBLINS,
-    DRAGON,
-    WIZARD,
-    ARCHERS,
-    CANON,
-};
-
 }  // namespace cr

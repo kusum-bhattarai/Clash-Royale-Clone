@@ -1,17 +1,18 @@
 #include <gtest/gtest.h>
 #include "clash_royale/core/rng.hpp"
-#include "clash_royale/sim/entity_factory.hpp"
+#include "test_helpers.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/sim/entity.hpp"
 
 using namespace cr;
+using namespace cr::testing;
 
 // Test Fixture for Damage Tests
 class DamageTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // This code runs before each test in this suite.
-        knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+        knight = spawn(cards::Knight, 10, 10, true);
     }
 
     std::shared_ptr<Entity> knight;
@@ -41,7 +42,7 @@ TEST_F(DamageTest, EntityHealthDoesNotGoBelowZero) {
 // Test Suite for Movement
 TEST(MovementTest, StationaryEntitiesDoNotMove) {
     Board board;
-    auto kingTower = EntityFactory::create(EntityType::KING_TOWER, 10, 3, false, Lane::LEFT);
+    auto kingTower = spawn(cards::KingTower, 10, 3, false);
     int startX = kingTower->getX();
     int startY = kingTower->getY();
 
@@ -57,8 +58,8 @@ TEST(MovementTest, StationaryEntitiesDoNotMove) {
 
 TEST(MovementTest, KnightMovesTowardTarget) {
     Board board;
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    auto enemy = EntityFactory::create(EntityType::KNIGHT, 10, 20, false, Lane::LEFT);
+    auto knight = spawn(cards::Knight, 10, 10, true);
+    auto enemy = spawn(cards::Knight, 10, 20, false);
     board.addEntity(knight);
     board.addEntity(enemy);
 
@@ -75,8 +76,8 @@ TEST(MovementTest, KnightMovesTowardTarget) {
 // Test Suite for the main combat logic on the board
 TEST(CombatTest, KnightAttacksEnemyInRange) {
     Board board;
-    auto playerKnight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    auto enemyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 11, false, Lane::LEFT);
+    auto playerKnight = spawn(cards::Knight, 10, 10, true);
+    auto enemyKnight = spawn(cards::Knight, 10, 11, false);
     
     int enemyInitialHealth = enemyKnight->getHealth();
 
@@ -95,8 +96,8 @@ TEST(CombatTest, KnightAttacksEnemyInRange) {
 
 TEST(CombatTest, KnightDoesNotAttackOutOfRange) {
     Board board;
-    auto playerKnight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    auto enemyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 20, false, Lane::LEFT);
+    auto playerKnight = spawn(cards::Knight, 10, 10, true);
+    auto enemyKnight = spawn(cards::Knight, 10, 20, false);
 
     int enemyInitialHealth = enemyKnight->getHealth();
 
@@ -114,9 +115,9 @@ TEST(CombatTest, KnightDoesNotAttackOutOfRange) {
 TEST(CombatTest, GolemPrioritizesTowerOverCloserTroop) {
     // Placing golem in range of both
     Board board;
-    auto golem = EntityFactory::create(EntityType::GOLEM, 10, 10, true, Lane::LEFT);
-    auto enemyTower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
-    auto decoyKnight = EntityFactory::create(EntityType::KNIGHT, 10, 11, false, Lane::LEFT);
+    auto golem = spawn(cards::Golem, 10, 10, true);
+    auto enemyTower = spawn(cards::QueenTower, 10, 25, false);
+    auto decoyKnight = spawn(cards::Knight, 10, 11, false);
     
     board.addEntity(golem);
     board.addEntity(enemyTower);
@@ -127,14 +128,14 @@ TEST(CombatTest, GolemPrioritizesTowerOverCloserTroop) {
 
     // ASSERT: The chosen target should not be null and should be the tower.
     ASSERT_NE(chosenTarget, nullptr);
-    EXPECT_EQ(chosenTarget->getType(), EntityType::QUEEN_TOWER);
+    EXPECT_EQ(chosenTarget->cardId(), cards::QueenTower);
 }
 
 TEST(CombatTest, CanonCannotAttackFlyingDragon) {
     // Placing a dragon in range of a canon.
     Board board;
-    auto canon = EntityFactory::create(EntityType::CANON, 15, 20, true, Lane::RIGHT);
-    auto dragon = EntityFactory::create(EntityType::DRAGON, 15, 22, false, Lane::RIGHT); // Well within range
+    auto canon = spawn(cards::Canon, 15, 20, true, Lane::RIGHT);
+    auto dragon = spawn(cards::Dragon, 15, 22, false, Lane::RIGHT); // Well within range
 
     int dragonInitialHealth = dragon->getHealth();
 
@@ -151,8 +152,8 @@ TEST(CombatTest, CanonCannotAttackFlyingDragon) {
 TEST(CombatTest, ArcherCanAttackFlyingDragon) {
     // Placing a dragon in range of an archer.
     Board board;
-    auto archer = EntityFactory::create(EntityType::ARCHERS, 15, 20, true, Lane::RIGHT);
-    auto dragon = EntityFactory::create(EntityType::DRAGON, 15, 25, false, Lane::RIGHT); // Within Archer's range of 7
+    auto archer = spawn(cards::Archers, 15, 20, true, Lane::RIGHT);
+    auto dragon = spawn(cards::Dragon, 15, 25, false, Lane::RIGHT); // Within Archer's range of 7
 
     int dragonInitialHealth = dragon->getHealth();
 
@@ -169,8 +170,8 @@ TEST(CombatTest, ArcherCanAttackFlyingDragon) {
 // Pekka's heavy armor
 TEST(AdvancedCombatTest, PekkaHasDamageResistance) {
     Board board;
-    auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 10, true, Lane::RIGHT);
-    auto enemyArchers = EntityFactory::create(EntityType::ARCHERS, 10, 15, false, Lane::RIGHT);
+    auto pekka = spawn(cards::Pekka, 10, 10, true, Lane::RIGHT);
+    auto enemyArchers = spawn(cards::Archers, 10, 15, false, Lane::RIGHT);
 
     int pekkaInitialHealth = pekka->getHealth();
     int archerBaseDamage = enemyArchers->getDamage(); // Should be 20

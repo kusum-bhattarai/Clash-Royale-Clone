@@ -1,8 +1,11 @@
 #include "clash_royale/sim/simulation.hpp"
 
 #include <algorithm>
+#include <stdexcept>
+#include <utility>
 
-#include "clash_royale/sim/entity_factory.hpp"
+#include "clash_royale/sim/default_cards.hpp"
+#include "clash_royale/sim/entity.hpp"
 
 namespace cr {
 namespace {
@@ -21,63 +24,51 @@ constexpr int kPlayerTwoQueenY = 5;
 constexpr int kPlayerOneKingY = 27;
 constexpr int kPlayerOneQueenY = 25;
 
-bool isKingOrQueen(EntityType type) {
-    return type == EntityType::KING_TOWER || type == EntityType::QUEEN_TOWER;
-}
-
 }  // namespace
 
-float elixirCost(EntityType type) {
-    switch (type) {
-        case EntityType::ARCHERS:
-            return 2.0f;
-        case EntityType::GOBLINS:
-        case EntityType::CANON:
-            return 3.0f;
-        case EntityType::KNIGHT:
-        case EntityType::PEKKA:
-        case EntityType::WIZARD:
-            return 4.0f;
-        case EntityType::GOLEM:
-        case EntityType::DRAGON:
-            return 5.0f;
-        case EntityType::KING_TOWER:
-        case EntityType::QUEEN_TOWER:
-            return 0.0f;  // not deployable
-    }
-    return 0.0f;
-}
-
-SpawnPoint spawnPointFor(EntityType type, Lane lane, bool isPlayerOne) {
+SpawnPoint spawnPointFor(const CardSpec& spec, Lane lane, bool isPlayerOne) {
     const int x = (lane == Lane::LEFT) ? kArenaWidth / 4 : kArenaWidth * 3 / 4;
     int y = isPlayerOne ? (kArenaHeight / 2) + 3 : (kArenaHeight / 2) - 3;
 
-    // Buildings are placed a little further back than troops.
-    if (type == EntityType::CANON) {
-        y = isPlayerOne ? y - 2 : y + 2;
+    // Cards may be placed further back than the lane spawn line; a Canon sets
+    // this to 2. It used to be an `if (type == CANON)` special case here.
+    if (spec.spawnSetback != 0) {
+        y += isPlayerOne ? -spec.spawnSetback : spec.spawnSetback;
     }
     return SpawnPoint{x, y};
 }
 
 Simulation::Simulation(MatchConfig config)
-    : m_config(config),
-      m_rng(config.deterministic ? Rng(config.seed) : Rng::fromEntropy()),
-      m_elixirOne(config.startingElixir),
-      m_elixirTwo(config.startingElixir) {
+    : m_config(std::move(config)),
+      m_rng(m_config.deterministic ? Rng(m_config.seed) : Rng::fromEntropy()),
+      m_elixirOne(m_config.startingElixir),
+      m_elixirTwo(m_config.startingElixir) {
     m_board.setCombatRules(m_config.combat);
 
-    // Player two (the AI) occupies the top of the arena, player one the bottom.
-    m_board.addEntity(EntityFactory::create(EntityType::KING_TOWER, kCenterX, kPlayerTwoKingY, false, Lane::LEFT));
-    m_board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, kCenterX - 1 - kSideOffset, kPlayerTwoQueenY,
-                                            false, Lane::LEFT));
-    m_board.addEntity(
-        EntityFactory::create(EntityType::QUEEN_TOWER, kCenterX + kSideOffset, kPlayerTwoQueenY, false, Lane::RIGHT));
+    // Entities hold references into m_config.cards, which lives as long as the
+    // simulation, so the specs they point at stay valid and at a fixed address.
+    const CardSpec* kingSpec = m_config.cards.find(m_config.kingTowerCard);
+    const CardSpec* queenSpec = m_config.cards.find(m_config.queenTowerCard);
+    if (kingSpec == nullptr || queenSpec == nullptr) {
+        // Fail with something actionable rather than letting a bare
+        // out_of_range escape from a registry lookup.
+        throw std::invalid_argument(
+            "MatchConfig::cards must define the tower cards '" + m_config.kingTowerCard + "' and '" +
+            m_config.queenTowerCard +
+            "'; a custom roster should either define them or set "
+            "MatchConfig::kingTowerCard / queenTowerCard to its own equivalents");
+    }
+    const CardSpec& king = *kingSpec;
+    const CardSpec& queen = *queenSpec;
 
-    m_board.addEntity(EntityFactory::create(EntityType::KING_TOWER, kCenterX, kPlayerOneKingY, true, Lane::LEFT));
-    m_board.addEntity(
-        EntityFactory::create(EntityType::QUEEN_TOWER, kCenterX - 1 - kSideOffset, kPlayerOneQueenY, true, Lane::LEFT));
-    m_board.addEntity(
-        EntityFactory::create(EntityType::QUEEN_TOWER, kCenterX + kSideOffset, kPlayerOneQueenY, true, Lane::RIGHT));
+    // Player two (the AI) occupies the top of the arena, player one the bottom.
+    m_board.addEntity(createEntity(king, kCenterX, kPlayerTwoKingY, false, Lane::LEFT));
+    m_board.addEntity(createEntity(queen, kCenterX - 1 - kSideOffset, kPlayerTwoQueenY, false, Lane::LEFT));
+    m_board.addEntity(createEntity(queen, kCenterX + kSideOffset, kPlayerTwoQueenY, false, Lane::RIGHT));
+
+    m_board.addEntity(createEntity(king, kCenterX, kPlayerOneKingY, true, Lane::LEFT));
+    m_board.addEntity(createEntity(queen, kCenterX - 1 - kSideOffset, kPlayerOneQueenY, true, Lane::LEFT));
+    m_board.addEntity(createEntity(queen, kCenterX + kSideOffset, kPlayerOneQueenY, true, Lane::RIGHT));
 }
 
 void Simulation::step(float dt) {
@@ -112,27 +103,32 @@ void Simulation::regenerateElixir(float dt) {
     }
 }
 
-bool Simulation::canAfford(EntityType type, bool isPlayerOne) const {
-    return elixir(isPlayerOne) >= elixirCost(type);
+bool Simulation::canAfford(std::string_view cardId, bool isPlayerOne) const {
+    const CardSpec* spec = m_config.cards.find(cardId);
+    if (spec == nullptr || !spec->deployable) {
+        return false;
+    }
+    return elixir(isPlayerOne) >= spec->elixirCost;
 }
 
-bool Simulation::deploy(EntityType type, Lane lane, bool isPlayerOne) {
-    if (!isRunning() || !canAfford(type, isPlayerOne)) {
+bool Simulation::deploy(std::string_view cardId, Lane lane, bool isPlayerOne) {
+    if (!isRunning() || !canAfford(cardId, isPlayerOne)) {
         return false;
     }
 
-    const SpawnPoint spawn = spawnPointFor(type, lane, isPlayerOne);
-    m_board.addEntity(EntityFactory::create(type, spawn.x, spawn.y, isPlayerOne, lane));
+    const CardSpec& spec = m_config.cards.get(cardId);
+    const SpawnPoint spawn = spawnPointFor(spec, lane, isPlayerOne);
+    m_board.addEntity(createEntity(spec, spawn.x, spawn.y, isPlayerOne, lane));
 
     float& pool = isPlayerOne ? m_elixirOne : m_elixirTwo;
-    pool -= elixirCost(type);
+    pool -= spec.elixirCost;
     return true;
 }
 
 int Simulation::towerHealth(bool isPlayerOne) const {
     int total = 0;
     for (const auto& entity : m_board.getEntities()) {
-        if (isKingOrQueen(entity->getType()) && entity->getIsPlayer() == isPlayerOne) {
+        if (entity->spec().towerRole != TowerRole::None && entity->getIsPlayer() == isPlayerOne) {
             total += entity->getHealth();
         }
     }
@@ -147,7 +143,7 @@ void Simulation::evaluateResult() {
     bool playerOneKingAlive = false;
     bool playerTwoKingAlive = false;
     for (const auto& entity : m_board.getEntities()) {
-        if (entity->getType() != EntityType::KING_TOWER) {
+        if (entity->spec().towerRole != TowerRole::King) {
             continue;
         }
         if (entity->getIsPlayer()) {

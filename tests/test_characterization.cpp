@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string_view>
+
 #include <algorithm>
 #include <cstdlib>
 #include <iterator>
@@ -20,14 +22,14 @@
 
 #include "clash_royale/core/rng.hpp"
 #include "clash_royale/core/types.hpp"
-#include "clash_royale/sim/entity_factory.hpp"
+#include "test_helpers.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/sim/simulation.hpp"
 #include "clash_royale/tui/renderer.hpp"
-#include "clash_royale/sim/knight.hpp"
 #include "clash_royale/sim/entity.hpp"
 
 using namespace cr;
+using namespace cr::testing;
 
 namespace {
 
@@ -40,10 +42,10 @@ void tick(const std::shared_ptr<Entity>& entity, const Board& board, int ticks) 
 
 // Builds a board holding `self` plus a single enemy at (ex, ey), so movement
 // can be observed against exactly one target with no ambiguity.
-Board boardWith(const std::shared_ptr<Entity>& self, EntityType enemyType, int ex, int ey) {
+Board boardWith(const std::shared_ptr<Entity>& self, std::string_view enemyCard, int ex, int ey) {
     Board board;
     board.addEntity(self);
-    board.addEntity(EntityFactory::create(enemyType, ex, ey, !self->getIsPlayer(), Lane::LEFT));
+    board.addEntity(spawn(enemyCard, ex, ey, !self->getIsPlayer()));
     return board;
 }
 
@@ -69,7 +71,7 @@ TEST(ArenaGeometry, MatchStartsWithSixTowersAtFixedPositions) {
     ASSERT_EQ(entities.size(), 6u);
 
     struct Expected {
-        EntityType type;
+        std::string_view card;
         int x, y;
         bool isPlayer;
     };
@@ -78,17 +80,17 @@ TEST(ArenaGeometry, MatchStartsWithSixTowersAtFixedPositions) {
     // is NOT horizontally symmetric, due to the `- 1 -` in the left-tower
     // offset in Simulation's constructor.
     const Expected expected[] = {
-        {EntityType::KING_TOWER, 19, 3, false},
-        {EntityType::QUEEN_TOWER, 6, 5, false},
-        {EntityType::QUEEN_TOWER, 31, 5, false},
-        {EntityType::KING_TOWER, 19, 27, true},
-        {EntityType::QUEEN_TOWER, 6, 25, true},
-        {EntityType::QUEEN_TOWER, 31, 25, true},
+        {cards::KingTower, 19, 3, false},
+        {cards::QueenTower, 6, 5, false},
+        {cards::QueenTower, 31, 5, false},
+        {cards::KingTower, 19, 27, true},
+        {cards::QueenTower, 6, 25, true},
+        {cards::QueenTower, 31, 25, true},
     };
 
     for (size_t i = 0; i < std::size(expected); ++i) {
         SCOPED_TRACE("tower index " + std::to_string(i));
-        EXPECT_EQ(entities[i]->getType(), expected[i].type);
+        EXPECT_EQ(entities[i]->cardId(), expected[i].card);
         EXPECT_EQ(entities[i]->getX(), expected[i].x);
         EXPECT_EQ(entities[i]->getY(), expected[i].y);
         EXPECT_EQ(entities[i]->getIsPlayer(), expected[i].isPlayer);
@@ -107,19 +109,34 @@ TEST(ArenaGeometry, MatchStartsWithFiveElixirEach) {
 // ---------------------------------------------------------------------------
 
 TEST(EntityConstruction, ClampsPositionsOutsideTheArena) {
-    Knight tooLow(EntityType::KNIGHT, -5, -5, true, 600, Lane::LEFT);
+    const CardSpec& knight = defaultCards().get(cards::Knight);
+
+    Entity tooLow(knight, -5, -5, true, Lane::LEFT);
     EXPECT_EQ(tooLow.getX(), 1);
     EXPECT_EQ(tooLow.getY(), 1);
 
-    Knight tooHigh(EntityType::KNIGHT, 999, 999, true, 600, Lane::LEFT);
+    Entity tooHigh(knight, 999, 999, true, Lane::LEFT);
     EXPECT_EQ(tooHigh.getX(), kArenaWidth - 2);   // 38
     EXPECT_EQ(tooHigh.getY(), kArenaHeight - 2);  // 33
 }
 
 TEST(EntityConstruction, RaisesNonPositiveHealthToOne) {
-    Knight dead(EntityType::KNIGHT, 10, 10, true, 0, Lane::LEFT);
-    EXPECT_EQ(dead.getHealth(), 1);
-    EXPECT_TRUE(dead.isAlive());
+    // Health comes from the card now, so an invalid value has to be defined as
+    // one. This doubles as the smallest possible custom-card registration.
+    CardRegistry registry;
+    CardSpec broken;
+    broken.id = "broken";
+    broken.symbol = 'X';
+    broken.health = 0;
+
+    Entity entity(registry.define(broken), 10, 10, true, Lane::LEFT);
+
+    EXPECT_EQ(entity.getHealth(), 1);
+    // The maximum is corrected too. It previously kept the invalid value while
+    // only the current health was clamped, which left a zero denominator for
+    // the renderer's health-bar arithmetic.
+    EXPECT_EQ(entity.getMaxHealth(), 1);
+    EXPECT_TRUE(entity.isAlive());
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +149,7 @@ TEST(EntityConstruction, RaisesNonPositiveHealthToOne) {
 // ---------------------------------------------------------------------------
 
 struct CadenceCase {
-    EntityType type;
+    std::string_view card;
     int ticksPerStep;
 };
 
@@ -141,10 +158,10 @@ class MovementCadence : public ::testing::TestWithParam<CadenceCase> {};
 TEST_P(MovementCadence, StepsOnExpectedTick) {
     const CadenceCase param = GetParam();
 
-    auto unit = EntityFactory::create(param.type, 10, 10, true, Lane::LEFT);
+    auto unit = spawn(param.card, 10, 10, true);
     // Must be a tower: the Golem ignores troops entirely, so a troop decoy
     // would leave it with no target and no movement at all.
-    Board board = boardWith(unit, EntityType::QUEEN_TOWER, 10, 30);
+    Board board = boardWith(unit, cards::QueenTower, 10, 30);
     const int startY = unit->getY();
 
     tick(unit, board, param.ticksPerStep - 1);
@@ -156,18 +173,18 @@ TEST_P(MovementCadence, StepsOnExpectedTick) {
 
 INSTANTIATE_TEST_SUITE_P(
     AllUnits, MovementCadence,
-    ::testing::Values(CadenceCase{EntityType::GOLEM, 20},    // speed 0.50
-                      CadenceCase{EntityType::PEKKA, 14},    // speed 0.75
-                      CadenceCase{EntityType::KNIGHT, 10},   // speed 1.00
-                      CadenceCase{EntityType::WIZARD, 10},   // speed 1.00
-                      CadenceCase{EntityType::GOBLINS, 9},   // speed 1.20
-                      CadenceCase{EntityType::ARCHERS, 9},   // speed 1.20
-                      CadenceCase{EntityType::DRAGON, 7}));  // speed 1.50
+    ::testing::Values(CadenceCase{cards::Golem, 20},    // speed 0.50
+                      CadenceCase{cards::Pekka, 14},    // speed 0.75
+                      CadenceCase{cards::Knight, 10},   // speed 1.00
+                      CadenceCase{cards::Wizard, 10},   // speed 1.00
+                      CadenceCase{cards::Goblins, 9},   // speed 1.20
+                      CadenceCase{cards::Archers, 9},   // speed 1.20
+                      CadenceCase{cards::Dragon, 7}));  // speed 1.50
 
 TEST(MovementCadence, StationaryUnitsNeverStep) {
-    for (EntityType type : {EntityType::KING_TOWER, EntityType::QUEEN_TOWER, EntityType::CANON}) {
-        auto building = EntityFactory::create(type, 10, 10, true, Lane::LEFT);
-        Board board = boardWith(building, EntityType::KNIGHT, 10, 30);
+    for (std::string_view card : {cards::KingTower, cards::QueenTower, cards::Canon}) {
+        auto building = spawn(card, 10, 10, true);
+        Board board = boardWith(building, cards::Knight, 10, 30);
 
         tick(building, board, 100);
 
@@ -185,9 +202,9 @@ TEST(MovementCadence, StationaryUnitsNeverStep) {
 // ---------------------------------------------------------------------------
 
 TEST(MovementShape, GroundUnitsMoveOnOneAxisAndPreferVerticalOnTies) {
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+    auto knight = spawn(cards::Knight, 10, 10, true);
     // dx == dy == 10, so |dx| > |dy| is false and the tie resolves vertically.
-    Board board = boardWith(knight, EntityType::KNIGHT, 20, 20);
+    Board board = boardWith(knight, cards::Knight, 20, 20);
 
     tick(knight, board, 10);
 
@@ -196,8 +213,8 @@ TEST(MovementShape, GroundUnitsMoveOnOneAxisAndPreferVerticalOnTies) {
 }
 
 TEST(MovementShape, GroundUnitsMoveHorizontallyWhenHorizontalDistanceDominates) {
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    Board board = boardWith(knight, EntityType::KNIGHT, 30, 12);
+    auto knight = spawn(cards::Knight, 10, 10, true);
+    Board board = boardWith(knight, cards::Knight, 30, 12);
 
     tick(knight, board, 10);
 
@@ -206,8 +223,8 @@ TEST(MovementShape, GroundUnitsMoveHorizontallyWhenHorizontalDistanceDominates) 
 }
 
 TEST(MovementShape, DragonMovesDiagonallyOnBothAxesAtOnce) {
-    auto dragon = EntityFactory::create(EntityType::DRAGON, 10, 10, true, Lane::LEFT);
-    Board board = boardWith(dragon, EntityType::KNIGHT, 20, 20);
+    auto dragon = spawn(cards::Dragon, 10, 10, true);
+    Board board = boardWith(dragon, cards::Knight, 20, 20);
 
     tick(dragon, board, 7);
 
@@ -218,8 +235,8 @@ TEST(MovementShape, DragonMovesDiagonallyOnBothAxesAtOnce) {
 TEST(MovementShape, RangedUnitsHaltOnceTheTargetIsWithinAttackRange) {
     // Archers have range 7. Starting 10 tiles away, they close to exactly 7 and
     // then stop advancing.
-    auto archers = EntityFactory::create(EntityType::ARCHERS, 10, 10, true, Lane::LEFT);
-    Board board = boardWith(archers, EntityType::KNIGHT, 10, 20);
+    auto archers = spawn(cards::Archers, 10, 10, true);
+    Board board = boardWith(archers, cards::Knight, 10, 20);
 
     tick(archers, board, 200);
 
@@ -229,9 +246,9 @@ TEST(MovementShape, RangedUnitsHaltOnceTheTargetIsWithinAttackRange) {
 
 TEST(MovementShape, UnitsWithNoEnemyOnTheBoardDoNotMove) {
     Board board;
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+    auto knight = spawn(cards::Knight, 10, 10, true);
     board.addEntity(knight);
-    board.addEntity(EntityFactory::create(EntityType::KNIGHT, 10, 20, true, Lane::LEFT));
+    board.addEntity(spawn(cards::Knight, 10, 20, true));
 
     tick(knight, board, 100);
 
@@ -244,8 +261,8 @@ TEST(MovementShape, UnitsWithNoEnemyOnTheBoardDoNotMove) {
 // zeroes immediately before calling move(), so only the horizontal-first case
 // ever ran. It now keys on the movement step count.
 TEST(MovementShape, GoblinsAlternateAxesAsTheyClose) {
-    auto goblins = EntityFactory::create(EntityType::GOBLINS, 10, 10, true, Lane::LEFT);
-    Board board = boardWith(goblins, EntityType::KNIGHT, 20, 20);
+    auto goblins = spawn(cards::Goblins, 10, 10, true);
+    Board board = boardWith(goblins, cards::Knight, 20, 20);
 
     const int kTicksPerStep = 9;
 
@@ -269,8 +286,8 @@ TEST(MovementShape, GoblinsAlternateAxesAsTheyClose) {
 
 TEST(Targeting, GroundUnitsIgnoreFlyingEnemiesEntirely) {
     // A Knight cannot attack air, so a Dragon is not even a movement target.
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    Board board = boardWith(knight, EntityType::DRAGON, 10, 20);
+    auto knight = spawn(cards::Knight, 10, 10, true);
+    Board board = boardWith(knight, cards::Dragon, 10, 20);
 
     tick(knight, board, 100);
 
@@ -279,12 +296,12 @@ TEST(Targeting, GroundUnitsIgnoreFlyingEnemiesEntirely) {
 
 TEST(Targeting, GolemWalksPastACloserTroopToReachATower) {
     Board board;
-    auto golem = EntityFactory::create(EntityType::GOLEM, 10, 10, true, Lane::LEFT);
+    auto golem = spawn(cards::Golem, 10, 10, true);
     board.addEntity(golem);
     // A decoy one tile *behind* the Golem, and a tower ahead of it. A
     // nearest-target unit would turn around; the Golem must not.
-    board.addEntity(EntityFactory::create(EntityType::KNIGHT, 10, 9, false, Lane::LEFT));
-    board.addEntity(EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT));
+    board.addEntity(spawn(cards::Knight, 10, 9, false));
+    board.addEntity(spawn(cards::QueenTower, 10, 25, false));
 
     tick(golem, board, 20);
 
@@ -297,8 +314,8 @@ TEST(Targeting, GolemWalksPastACloserTroopToReachATower) {
 
 TEST(BoardBookkeeping, RemovesDeadTroopsButRetainsDeadTowers) {
     Board board;
-    auto troop = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
-    auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 20, 20, false, Lane::LEFT);
+    auto troop = spawn(cards::Knight, 10, 10, true);
+    auto tower = spawn(cards::QueenTower, 20, 20, false);
     board.addEntity(troop);
     board.addEntity(tower);
 
@@ -310,12 +327,12 @@ TEST(BoardBookkeeping, RemovesDeadTroopsButRetainsDeadTowers) {
     board.updateEntities();
 
     ASSERT_EQ(board.getEntities().size(), 1u);
-    EXPECT_EQ(board.getEntities().front()->getType(), EntityType::QUEEN_TOWER)
+    EXPECT_EQ(board.getEntities().front()->cardId(), cards::QueenTower)
         << "dead towers are deliberately retained so win conditions can inspect them";
 }
 
 TEST(BoardBookkeeping, NegativeDamageIsRejectedAndHealthFloorsAtZero) {
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 10, true, Lane::LEFT);
+    auto knight = spawn(cards::Knight, 10, 10, true);
     const int initial = knight->getHealth();
 
     knight->takeDamage(-100);
@@ -348,8 +365,8 @@ Board deterministicBoard() {
 // every 0.1s tick, so a Knight dealt 500 damage per second instead of ~42.
 TEST(Combat, AttacksAreRateLimitedByAttackSpeed) {
     Board board = deterministicBoard();
-    auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 24, true, Lane::LEFT);
-    auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+    auto knight = spawn(cards::Knight, 10, 24, true);
+    auto tower = spawn(cards::QueenTower, 10, 25, false);
     board.addEntity(knight);
     board.addEntity(tower);
 
@@ -373,8 +390,8 @@ TEST(Combat, AttacksAreRateLimitedByAttackSpeed) {
 TEST(Combat, FirstAttackLandsImmediately) {
     // Units start ready, so engaging costs no warm-up.
     Board board = deterministicBoard();
-    auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 24, true, Lane::LEFT);
-    auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+    auto pekka = spawn(cards::Pekka, 10, 24, true);
+    auto tower = spawn(cards::QueenTower, 10, 25, false);
     board.addEntity(pekka);
     board.addEntity(tower);
 
@@ -390,8 +407,8 @@ TEST(Combat, DamagePerSecondIsIndependentOfTheTimestep) {
     // not change how much damage lands over the same elapsed time.
     auto damageOverTenSeconds = [](float dt, int steps) {
         Board board = deterministicBoard();
-        auto archers = EntityFactory::create(EntityType::ARCHERS, 10, 20, true, Lane::LEFT);
-        auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+        auto archers = spawn(cards::Archers, 10, 20, true);
+        auto tower = spawn(cards::QueenTower, 10, 25, false);
         board.addEntity(archers);
         board.addEntity(tower);
 
@@ -420,8 +437,8 @@ TEST(Combat, CriticalHitAppliesExactlyOnePerAttack) {
 
         Board board;
         board.setCombatRules(CombatRules{c.chance, 1.5f});
-        auto knight = EntityFactory::create(EntityType::KNIGHT, 10, 24, true, Lane::LEFT);
-        auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+        auto knight = spawn(cards::Knight, 10, 24, true);
+        auto tower = spawn(cards::QueenTower, 10, 25, false);
         board.addEntity(knight);
         board.addEntity(tower);
 
@@ -436,8 +453,8 @@ TEST(Combat, CriticalHitAppliesExactlyOnePerAttack) {
 
 TEST(Combat, HeavyArmorReducesIncomingDamage) {
     Board board = deterministicBoard();
-    auto pekka = EntityFactory::create(EntityType::PEKKA, 10, 10, true, Lane::LEFT);
-    auto archers = EntityFactory::create(EntityType::ARCHERS, 10, 12, false, Lane::LEFT);
+    auto pekka = spawn(cards::Pekka, 10, 10, true);
+    auto archers = spawn(cards::Archers, 10, 12, false);
     board.addEntity(pekka);
     board.addEntity(archers);
 
@@ -454,8 +471,8 @@ TEST(Combat, SameSeedProducesIdenticalDamage) {
     auto runOnce = [](std::uint64_t seed) {
         Board board;
         board.setCombatRules(CombatRules{0.5f, 1.5f});  // crit often, to vary output
-        auto wizard = EntityFactory::create(EntityType::WIZARD, 10, 24, true, Lane::LEFT);
-        auto tower = EntityFactory::create(EntityType::QUEEN_TOWER, 10, 25, false, Lane::LEFT);
+        auto wizard = spawn(cards::Wizard, 10, 24, true);
+        auto tower = spawn(cards::QueenTower, 10, 25, false);
         board.addEntity(wizard);
         board.addEntity(tower);
 
@@ -484,7 +501,7 @@ TEST(DeploymentGeometry, TroopsSpawnAtTheLaneSpawnPoints) {
     Simulation sim{config};
     const size_t towerCount = sim.board().getEntities().size();
 
-    ASSERT_TRUE(sim.deploy(EntityType::ARCHERS, Lane::RIGHT, /*isPlayerOne=*/false));
+    ASSERT_TRUE(sim.deploy(cards::Archers, Lane::RIGHT, /*isPlayerOne=*/false));
     ASSERT_GT(sim.board().getEntities().size(), towerCount);
 
     // spawnX is kArenaWidth/4 or kArenaWidth*3/4; spawnY for player two is

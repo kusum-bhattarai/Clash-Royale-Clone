@@ -38,24 +38,11 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(cr_core
     src/sim/entity.cpp
-    src/sim/movable_entity.cpp
-    src/sim/ranged_entity.cpp
-    src/sim/tower_prioritizing_entity.cpp
     src/sim/board.cpp
     src/sim/combat.cpp
+    src/sim/card_registry.cpp
     src/sim/simulation.cpp
-    src/ai/random_controller.cpp
-    src/sim/entity_factory.cpp
-    src/sim/archers.cpp
-    src/sim/canon.cpp
-    src/sim/dragon.cpp
-    src/sim/goblins.cpp
-    src/sim/golem.cpp
-    src/sim/king_tower.cpp
-    src/sim/knight.cpp
-    src/sim/pekka.cpp
-    src/sim/queen_tower.cpp
-    src/sim/wizard.cpp)
+    src/ai/random_controller.cpp)
 add_library(ClashRoyale::core ALIAS cr_core)
 
 target_include_directories(cr_core PUBLIC
@@ -110,9 +97,11 @@ if(CR_BUILD_TESTING)
         tests/test_entity_f.cpp
         tests/test_entity_behavior.cpp
         tests/test_simulation.cpp
-        tests/test_characterization.cpp)
+        tests/test_characterization.cpp
+        tests/test_card_registry.cpp)
     # The suite links cr_core only: nothing under tests/ touches the front-end.
     target_link_libraries(run_tests PRIVATE gtest_main cr_core)
+    target_include_directories(run_tests PRIVATE tests)
     target_compile_options(run_tests PRIVATE ${CR_WARNINGS})
 
     include(GoogleTest)
@@ -136,8 +125,12 @@ if(CR_INSTALL)
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-    install(DIRECTORY include/clash_royale/core include/clash_royale/sim
-            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/clash_royale)
+    # Install everything except the front-end headers, by exclusion rather than
+    # by listing directories -- an earlier version enumerated core/ and sim/ and
+    # silently stopped shipping ai/ when that directory was added.
+    install(DIRECTORY include/clash_royale
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+            REGEX "/tui/" EXCLUDE)
     if(CR_BUILD_TUI)
         install(DIRECTORY include/clash_royale/tui
                 DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/clash_royale)

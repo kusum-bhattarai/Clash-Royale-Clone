@@ -7,72 +7,29 @@
 namespace cr {
 namespace {
 
-/// Matchup bonuses keyed on who is attacking what.
-float matchupMultiplier(const Entity& attacker, const Entity& target) {
-    float multiplier = 1.0f;
-
-    switch (target.getType()) {
-        case EntityType::KING_TOWER:
-        case EntityType::QUEEN_TOWER:
-            if (attacker.getType() == EntityType::GOLEM) {
-                multiplier *= 1.5f;  // Golem hits buildings harder
-            }
-            break;
-
-        case EntityType::CANON:
-            if (attacker.getType() == EntityType::PEKKA) {
-                multiplier *= 1.3f;  // PEKKA hits buildings harder
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    switch (attacker.getType()) {
-        case EntityType::WIZARD:
-            if (target.isFlying()) {
-                multiplier *= 1.2f;  // splash is effective against air
-            }
-            break;
-
-        case EntityType::PEKKA:
-            multiplier *= 1.2f;  // heavy armor penetration
-            break;
-
-        case EntityType::GOBLINS:
-            if (target.getType() == EntityType::KNIGHT ||
-                target.getType() == EntityType::WIZARD ||
-                target.getType() == EntityType::ARCHERS) {
-                multiplier *= 1.1f;  // effective against light armor
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    return multiplier;
+template <typename T>
+bool containsOrEmpty(const std::vector<T>& values, const T& needle) {
+    return values.empty() || std::find(values.begin(), values.end(), needle) != values.end();
 }
 
-/// Incoming-damage scaling from the target's armor class.
-float armorMultiplier(const Entity& target) {
-    switch (target.getType()) {
-        case EntityType::KNIGHT:
-            return 0.8f;  // medium armor
+/// A modifier applies when every condition it specifies matches. Conditions
+/// left empty match anything, so a modifier with none always applies.
+bool applies(const DamageModifier& modifier, const Entity& target) {
+    const CardSpec& spec = target.spec();
 
-        case EntityType::GOLEM:
-        case EntityType::PEKKA:
-            return 0.6f;  // heavy armor
-
-        case EntityType::GOBLINS:
-        case EntityType::WIZARD:
-        case EntityType::ARCHERS:
-            return 1.0f;  // light armor
-
-        default:
-            return 1.0f;
+    if (!containsOrEmpty(modifier.againstArmor, spec.armor)) {
+        return false;
     }
+    if (!containsOrEmpty(modifier.againstDomain, spec.domain)) {
+        return false;
+    }
+    if (!containsOrEmpty(modifier.againstCards, spec.id)) {
+        return false;
+    }
+    if (modifier.againstBuildings.has_value() && *modifier.againstBuildings != spec.isBuilding) {
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -84,14 +41,22 @@ bool isWithinRange(const Entity& attacker, const Entity& target, int range) {
 }
 
 int resolveDamage(const Entity& attacker, const Entity& target, const CombatRules& rules, Rng& rng) {
-    const float scaled = static_cast<float>(attacker.getDamage()) * matchupMultiplier(attacker, target) *
-                         armorMultiplier(target);
+    // Matchup bonuses and armor scaling were two switch statements over a
+    // closed EntityType enum, so a downstream card could not participate in
+    // either. They are now data: the attacker carries its modifiers and the
+    // target carries its incoming multiplier.
+    float multiplier = 1.0f;
+    for (const DamageModifier& modifier : attacker.spec().damageModifiers) {
+        if (applies(modifier, target)) {
+            multiplier *= modifier.multiplier;
+        }
+    }
 
+    const float scaled =
+        static_cast<float>(attacker.getDamage()) * multiplier * target.spec().incomingDamageMultiplier;
     int damage = static_cast<int>(scaled);
 
-    // Exactly one critical roll. This previously happened twice -- once before
-    // armor scaling and once after -- which made 2.25x damage reachable and
-    // lifted the effective crit rate from the intended 5% to about 9.75%.
+    // Exactly one critical roll, applied to final damage.
     if (rng.chance(rules.criticalChance)) {
         damage = static_cast<int>(static_cast<float>(damage) * rules.criticalMultiplier);
     }

@@ -76,7 +76,7 @@ jobs:
           exit 1
         fi
 
-    - name: Consume the installed package from a separate project
+    - name: Consume the installed package and add a card from outside it
       run: |
         mkdir -p consumer && cd consumer
         cat > CMakeLists.txt <<'EOF'
@@ -87,14 +87,42 @@ jobs:
         target_link_libraries(downstream PRIVATE ClashRoyale::core)
         EOF
         cat > main.cpp <<'EOF'
-        #include "clash_royale/sim/board.hpp"
-        #include "clash_royale/sim/entity_factory.hpp"
+        // Defines a card and plays a match with it, without modifying the
+        // library. Guards both the packaging (every core header is installed)
+        // and the extension point itself.
+        #include <cstdio>
+        #include "clash_royale/ai/random_controller.hpp"
+        #include "clash_royale/sim/simulation.hpp"
+
         int main() {
-            cr::Board board;
-            board.addEntity(cr::EntityFactory::create(
-                cr::EntityType::KNIGHT, 10, 10, true, cr::Lane::LEFT));
-            board.updateEntities();
-            return board.getEntities().size() == 1 ? 0 : 1;
+            cr::CardSpec harpy;
+            harpy.id = "harpy";
+            harpy.symbol = 'H';
+            harpy.health = 240;
+            harpy.damage = 30;
+            harpy.attackRange = 2;
+            harpy.moveSpeed = 1.6f;
+            harpy.elixirCost = 3.0f;
+            harpy.domain = cr::MovementDomain::Air;
+            harpy.movement = cr::MovementStyle::Diagonal;
+            harpy.targets = cr::TargetFilter{true, true};
+            harpy.damageModifiers = {cr::DamageModifier{2.0f, {cr::ArmorClass::Heavy}, {}, {}, {}}};
+
+            cr::MatchConfig config;
+            config.deterministic = true;
+            config.seed = 1234;
+            config.cards.define(harpy);
+
+            cr::Simulation sim{config};
+            cr::RandomAiController ai;
+            int played = 0;
+            while (sim.isRunning()) {
+                ai.update(sim, false, cr::kDefaultTimeStep);
+                if (sim.deploy("harpy", cr::Lane::LEFT, true)) played++;
+                sim.step();
+            }
+            std::printf("roster=%zu played=%d\n", sim.cards().size(), played);
+            return (sim.cards().size() == 11 && played > 0) ? 0 : 1;
         }
         EOF
         cmake -S . -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/prefix"

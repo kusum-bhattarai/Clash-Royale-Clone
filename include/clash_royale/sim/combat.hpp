@@ -1,6 +1,9 @@
 #pragma once
 
+#include <vector>
+
 #include "clash_royale/core/rng.hpp"
+#include "clash_royale/sim/card.hpp"
 
 namespace cr {
 
@@ -29,9 +32,9 @@ bool isWithinRange(const Entity& attacker, const Entity& target, int range);
 /// multipliers, then the target's armor class, then at most one critical-hit
 /// roll. Damage is floored at 1 so an attack is never fully absorbed.
 ///
-/// The matchup and armor tables switch on EntityType, which is why adding a
-/// unit currently means editing this file. A later change moves these
-/// modifiers into the card registry as data.
+/// Matchup bonuses come from the attacker's CardSpec::damageModifiers and armor
+/// scaling from the target's CardSpec::incomingDamageMultiplier, so a card
+/// defined outside the library participates in both without editing this file.
 int resolveDamage(const Entity& attacker, const Entity& target, const CombatRules& rules, Rng& rng);
 
 }  // namespace cr

@@ -2,9 +2,14 @@
 
 #include <cstdint>
 
+#include <string>
+#include <string_view>
+
 #include "clash_royale/core/rng.hpp"
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/board.hpp"
+#include "clash_royale/sim/card_registry.hpp"
+#include "clash_royale/sim/default_cards.hpp"
 
 namespace cr {
 
@@ -25,25 +30,31 @@ struct MatchConfig {
     float startingElixir = 5.0f;
     CombatRules combat{};
 
+    /// The cards available in this match. Replace or extend this to play with
+    /// a custom roster; entities hold references into it, so the simulation
+    /// keeps its own copy for the duration of the match.
+    CardRegistry cards = CardRegistry::withDefaultCards();
+
+    /// Which cards are placed as the starting towers.
+    ///
+    /// A match needs both, because the win condition is defined in terms of
+    /// them. A custom roster either defines cards under these ids or points
+    /// these at its own equivalents.
+    std::string kingTowerCard{cards::KingTower};
+    std::string queenTowerCard{cards::QueenTower};
+
     /// Seed for the simulation's generator. When nullopt, a seed is drawn from
     /// system entropy; either way `Simulation::rng().seed()` reports it.
     bool deterministic = false;
     std::uint64_t seed = 0;
 };
 
-/// Elixir cost of deploying a unit.
-///
-/// This was previously duplicated across three separate switch statements in
-/// the game loop -- troop selection, lane confirmation and the AI -- which
-/// could disagree with each other. The card registry turns it into data.
-float elixirCost(EntityType type);
-
 /// Where a unit appears when deployed down a lane.
 struct SpawnPoint {
     int x;
     int y;
 };
-SpawnPoint spawnPointFor(EntityType type, Lane lane, bool isPlayerOne);
+SpawnPoint spawnPointFor(const CardSpec& spec, Lane lane, bool isPlayerOne);
 
 /// A headless match.
 ///
@@ -54,6 +65,8 @@ SpawnPoint spawnPointFor(EntityType type, Lane lane, bool isPlayerOne);
 /// at whatever rate the caller likes.
 class Simulation {
 public:
+    /// Throws std::invalid_argument when the configured registry does not
+    /// define the two tower cards the win condition depends on.
     explicit Simulation(MatchConfig config = {});
 
     /// Advances the match by `dt` seconds: elixir regeneration, entity
@@ -69,14 +82,19 @@ public:
 
     float elixir(bool isPlayerOne) const { return isPlayerOne ? m_elixirOne : m_elixirTwo; }
 
-    /// True when the player can afford `type`.
-    bool canAfford(EntityType type, bool isPlayerOne) const;
+    /// The cards available in this match.
+    const CardRegistry& cards() const { return m_config.cards; }
 
-    /// Deploys a unit down a lane, spending its elixir cost.
+    /// True when the player can afford the named card.
+    /// Unknown ids and non-deployable cards return false.
+    bool canAfford(std::string_view cardId, bool isPlayerOne) const;
+
+    /// Deploys a card down a lane, spending its elixir cost.
     ///
-    /// Returns false and changes nothing when the player cannot afford it or
-    /// the match has ended, so callers never have to pre-check.
-    bool deploy(EntityType type, Lane lane, bool isPlayerOne);
+    /// Returns false and changes nothing when the id is unknown, the card is
+    /// not deployable, the player cannot afford it, or the match has ended --
+    /// so callers never have to pre-check.
+    bool deploy(std::string_view cardId, Lane lane, bool isPlayerOne);
 
     /// Total remaining health across a player's towers. This is the tiebreaker
     /// when a match reaches full time.

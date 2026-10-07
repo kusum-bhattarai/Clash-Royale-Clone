@@ -44,41 +44,83 @@ keyboard, draws frames and paces itself. Every match rule lives in `cr_core`, so
 the whole test suite builds and runs with the front-end switched off -- which CI
 checks on every push.
 
-## 3. Class Hierarchy and Design
+## 3. Cards, Entities and Design
 
-The entity system is the core of the project, built with a clear inheritance hierarchy to promote code reuse and specialization.
+### 3.1 Cards are data
 
-### 3.1 Entity Class Hierarchy 
-![alt text](Architecture_diagram.png)
+A unit is a `CardSpec` value: its stats, elixir cost, armor class, movement
+style, target filter and damage modifiers. Cards live in a `CardRegistry`, keyed
+by a string id, and `MatchConfig::cards` decides which roster a match uses.
 
-### 3.2 Class Descriptions
+Adding a unit used to mean editing five places -- a new header, a new source
+file, the `EntityType` enum, the factory switch, and both damage-modifier
+switches in the damage calculation. None of those were reachable from outside
+the library, so a downstream project could not add a card without forking. A
+card is now registered from outside:
 
-- **Entity (Abstract Base Class)**: Defines the common interface for all game objects with pure virtual functions for `calculateStats()` and `move()`, ensuring subclasses implement specific behaviors.
-- **Abstract Subclasses**:
-  - `MovableEntity`: Base for troops that can move, implementing standard "move towards target" logic.
-  - `StationaryEntity`: Base for buildings, with an empty `move()` method to prevent movement.
-  - `RangedEntity`: Extends `MovableEntity` for troops that attack from a distance, with potential for range-specific logic.
-  - `TowerPrioritizingEntity`: Extends `MovableEntity`, overriding `findTarget()` to prioritize buildings (e.g., Golem).
-- **Concrete Classes**: Troops (e.g., `Knight`, `Dragon`) and buildings (e.g., `KingTower`, `Canon`) inherit from appropriate base classes, providing specific stats and behaviors.
+```cpp
+cr::CardSpec harpy;
+harpy.id = "harpy";
+harpy.health = 240;
+harpy.damage = 30;
+harpy.domain = cr::MovementDomain::Air;
+harpy.targets = cr::TargetFilter{/*ground=*/true, /*air=*/true};
+harpy.damageModifiers = {cr::DamageModifier{2.0f, {cr::ArmorClass::Heavy}}};
+
+cr::MatchConfig config;
+config.cards.define(harpy);
+cr::Simulation sim{config};
+sim.deploy("harpy", cr::Lane::LEFT, /*isPlayerOne=*/true);
+```
+
+The `EntityType` enum is gone. A closed enumeration could not name a card
+defined downstream, and any code switching on one was incomplete by
+construction -- which is exactly what the two damage switches were. Built-in
+ids are available as constants in `sim/default_cards.hpp`.
+
+### 3.2 Entity is concrete
+
+`Entity` reads its stats from the spec it was built with. The hierarchy that
+used to sit above it is gone:
+
+- Ten classes (`Knight`, `Golem`, `Pekka`, ...) existed only to assign five
+  numbers in `calculateStats()`. Those numbers are now rows in the card table.
+- `MovableEntity`, `StationaryEntity` and `RangedEntity` selected a movement
+  policy. That is now `CardSpec::movement`, a `MovementStyle`.
+- `TowerPrioritizingEntity` overrode targeting so the Golem would ignore
+  troops. That is now `TargetFilter::buildingsOnly`.
+
+Twenty-nine files were deleted in the process, with no change in behavior.
+
+`Entity` is still polymorphic: `update()`, `move()` and `findTarget()` remain
+virtual, and `CardSpec::factory` lets a card supply its own subclass. That is
+the escape hatch for behavior that genuinely cannot be described as data -- data
+covers the common case, and subclassing stays available for the rest.
 
 ### 3.3 Key Design Patterns
 
-- **Factory Pattern (`EntityFactory`)**: Decouples game logic from concrete entity creation. The `Game` class uses `EntityFactory` to create troops based on `EntityType`, enabling easy addition of new troops.
-- **Template Method Pattern**: The `Entity::update()` method defines a skeleton algorithm (check timer, then move), with subclasses overriding the `move()` step for specific behaviors (e.g., straight, diagonal, zigzag).
-- **Headless Core**: `Simulation` owns every match rule -- the board, both elixir
-  pools, the clock, the win condition and the random generator -- and performs no
-  I/O. `step(dt)` advances it by an explicit time delta, so it can be driven by
-  the terminal front-end, a test, a bot or a training harness at any rate. The
-  `TestableGame` subclass that previously existed to reach `Game`'s protected
-  methods is gone: there is nothing left to reach around, because the logic is
-  public on a class that needs no terminal.
-- **Strategy Pattern (`AiController`)**: Opponents implement a single `update()`
-  method and act only through `Simulation`'s public interface, so a custom AI
-  cannot cheat. `RandomAiController` is the default and the reference example.
+- **Data-Driven Cards (`CardRegistry`)**: the library's extension point.
+  Registered specs are stored at stable addresses, so the `const CardSpec&` an
+  entity holds stays valid as further cards are defined.
+- **Headless Core**: `Simulation` owns every match rule -- the board, both
+  elixir pools, the clock, the win condition and the random generator -- and
+  performs no I/O. `step(dt)` advances it by an explicit time delta, so it can
+  be driven by the terminal front-end, a test, a bot or a training harness at
+  any rate.
+- **Strategy Pattern (`AiController`)**: opponents implement a single
+  `update()` method and act only through `Simulation`'s public interface, so a
+  custom AI cannot cheat. `RandomAiController` reads its roster from the
+  registry, so it picks up downstream cards automatically.
 - **Determinism**: randomness comes from a `cr::Rng` (`std::mt19937`) owned by
   the simulation, not global `std::rand()`. A `MatchConfig` seed therefore
   replays a match exactly, on any platform, and two simulations in one process
   cannot perturb each other.
+- **Single Source of Targeting**: `Entity::canTarget` is consulted by both
+  movement and combat. Those previously held independent copies of the policy,
+  which is why the Golem's preference had to be special-cased in each.
+
+> **Note:** `Architecture_diagram.png` still shows the old entity hierarchy and
+> needs regenerating.
 
 ## 4. Build and Test System
 

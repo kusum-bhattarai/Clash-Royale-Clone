@@ -2,29 +2,37 @@
 
 #include <chrono>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
+
+#include "clash_royale/sim/default_cards.hpp"
 
 namespace cr {
 namespace {
 
-/// Maps a keypress to the unit it deploys.
-std::optional<EntityType> troopForKey(char key) {
+/// Maps a keypress to the card it deploys.
+///
+/// Only the built-in roster is bound to keys. A front-end for a custom roster
+/// would build this from `Simulation::cards().deployable()` instead.
+std::optional<std::string_view> cardForKey(char key) {
     switch (key) {
-        case 'k': return EntityType::KNIGHT;
-        case 'g': return EntityType::GOLEM;
-        case 'p': return EntityType::PEKKA;
-        case 'b': return EntityType::GOBLINS;
-        case 'd': return EntityType::DRAGON;
-        case 'w': return EntityType::WIZARD;
-        case 'a': return EntityType::ARCHERS;
-        case 'c': return EntityType::CANON;
+        case 'k': return cards::Knight;
+        case 'g': return cards::Golem;
+        case 'p': return cards::Pekka;
+        case 'b': return cards::Goblins;
+        case 'd': return cards::Dragon;
+        case 'w': return cards::Wizard;
+        case 'a': return cards::Archers;
+        case 'c': return cards::Canon;
         default:  return std::nullopt;
     }
 }
 
 }  // namespace
 
-Game::Game(MatchConfig config) : m_sim(config) {}
+Game::Game(MatchConfig config) : m_sim(std::move(config)) {}
 
 void Game::run() {
     while (m_sim.isRunning() && !m_quitRequested) {
@@ -71,14 +79,14 @@ void Game::processInput() {
         // deploy() checks affordability and spends the elixir itself, so the
         // cost no longer has to be looked up here. It was previously computed
         // by a second switch statement that could drift from the first.
-        m_sim.deploy(m_pendingTroop, lane, /*isPlayerOne=*/true);
+        m_sim.deploy(m_pendingCard, lane, /*isPlayerOne=*/true);
         m_state = GameState::SELECTING_TROOP;
         return;
     }
 
-    const auto troop = troopForKey(*key);
-    if (troop && m_sim.canAfford(*troop, /*isPlayerOne=*/true)) {
-        m_pendingTroop = *troop;
+    const auto card = cardForKey(*key);
+    if (card && m_sim.canAfford(*card, /*isPlayerOne=*/true)) {
+        m_pendingCard = std::string(*card);
         m_state = GameState::SELECTING_LANE;
     }
 }

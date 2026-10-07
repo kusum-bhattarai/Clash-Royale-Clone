@@ -1,19 +1,11 @@
 #include "clash_royale/ai/random_controller.hpp"
 
-#include <array>
+#include <vector>
 
+#include "clash_royale/sim/card.hpp"
 #include "clash_royale/sim/simulation.hpp"
 
 namespace cr {
-namespace {
-
-/// Every unit a player can actually deploy. Towers are excluded.
-constexpr std::array<EntityType, 8> kDeployable{
-    EntityType::KNIGHT, EntityType::GOLEM,  EntityType::PEKKA,   EntityType::GOBLINS,
-    EntityType::DRAGON, EntityType::WIZARD, EntityType::ARCHERS, EntityType::CANON,
-};
-
-}  // namespace
 
 void RandomAiController::update(Simulation& sim, bool isPlayerOne, float /*dt*/) {
     if (sim.elixir(isPlayerOne) < m_minimumElixir) {
@@ -23,12 +15,19 @@ void RandomAiController::update(Simulation& sim, bool isPlayerOne, float /*dt*/)
         return;
     }
 
-    const EntityType type = kDeployable[sim.rng().below(kDeployable.size())];
+    // The roster comes from the registry rather than a hardcoded list, so a
+    // custom card added by a downstream project is picked up automatically.
+    const std::vector<const CardSpec*>& options = sim.cards().deployable();
+    if (options.empty()) {
+        return;
+    }
+
+    const CardSpec& pick = *options[sim.rng().below(static_cast<std::uint32_t>(options.size()))];
     const Lane lane = (sim.rng().below(2) == 0) ? Lane::LEFT : Lane::RIGHT;
 
     // deploy() re-checks affordability, so an unaffordable pick simply does
     // nothing this step rather than needing a guard here.
-    sim.deploy(type, lane, isPlayerOne);
+    sim.deploy(pick.id, lane, isPlayerOne);
 }
 
 }  // namespace cr

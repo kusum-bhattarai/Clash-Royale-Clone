@@ -46,7 +46,7 @@ private:
     Renderer m_renderer;
     InputHandler m_input;
     GameState m_state = GameState::SELECTING_TROOP;
-    EntityType m_pendingTroop = EntityType::KNIGHT;
+    std::string m_pendingCard;
     bool m_quitRequested = false;
 };
 
