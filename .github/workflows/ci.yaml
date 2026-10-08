@@ -66,9 +66,37 @@ jobs:
           exit 1
         fi
 
-    - name: Assert no POSIX terminal headers leak out of the core
+    # Enumerates the core headers rather than naming them, so this cannot go
+    # stale. An earlier version probed two headers by name and kept passing
+    # after one of them was deleted, until the compile itself started failing.
+    - name: Assert every core header is self-contained and free of terminal I/O
       run: |
-        printf '#include "clash_royale/sim/entity_factory.hpp"\n#include "clash_royale/sim/board.hpp"\nint main(){}\n' > probe.cpp
+        headers=$(find include/clash_royale/core include/clash_royale/sim \
+                       include/clash_royale/path include/clash_royale/ai \
+                       -name '*.hpp' | sort)
+        if [ -z "$headers" ]; then
+          echo "::error::found no core headers to check; the layout moved"
+          exit 1
+        fi
+        echo "checking $(echo "$headers" | wc -l) headers"
+
+        # Each header must compile on its own, so a consumer can include any
+        # one of them without discovering a missing dependency.
+        for header in $headers; do
+          printf '#include "%s"\nint main(){}\n' "${header#include/}" > one.cpp
+          if ! g++ -std=c++20 -Iinclude -fsyntax-only one.cpp; then
+            echo "::error::${header#include/} is not self-contained"
+            exit 1
+          fi
+        done
+
+        # Together they must not pull in terminal I/O. cr_core has to build on
+        # platforms that have no termios at all.
+        : > probe.cpp
+        for header in $headers; do
+          printf '#include "%s"\n' "${header#include/}" >> probe.cpp
+        done
+        echo 'int main(){}' >> probe.cpp
         g++ -std=c++20 -Iinclude -H -fsyntax-only probe.cpp 2> deps.txt
         if grep -qE 'termios|sys/select' deps.txt; then
           echo "::error::a core header reaches terminal I/O"
