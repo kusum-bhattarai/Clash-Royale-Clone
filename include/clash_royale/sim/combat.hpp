@@ -22,6 +22,14 @@ struct CombatRules {
     float criticalMultiplier = 1.5f;
 };
 
+/// The combined damage multiplier `attacker` enjoys against `target`, from the
+/// attacker's modifiers alone -- armor scaling is the target's own
+/// `incomingDamageMultiplier` and is applied separately.
+///
+/// Exposed because an AI weighing a counter needs the same answer combat does,
+/// and reimplementing the matching rules would let the two drift apart.
+float matchupMultiplier(const CardSpec& attacker, const CardSpec& target);
+
 /// True when `target` lies within `range` tiles of `attacker`, measured as
 /// squared Euclidean distance.
 bool isWithinRange(const Entity& attacker, const Entity& target, int range);

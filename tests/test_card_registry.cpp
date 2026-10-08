@@ -43,7 +43,7 @@ CardSpec harpySpec() {
     spec.armor = ArmorClass::Light;
     spec.targets = TargetFilter{/*ground=*/true, /*air=*/true};
     spec.damageModifiers = {
-        DamageModifier{2.0f, {ArmorClass::Heavy}, {}, {}, {}},
+        DamageModifier{.multiplier = 2.0f, .againstArmor = {ArmorClass::Heavy}},
     };
     return spec;
 }

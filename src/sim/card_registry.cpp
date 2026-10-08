@@ -107,15 +107,16 @@ CardRegistry CardRegistry::withDefaultCards() {
     // Replaces the TowerPrioritizingEntity subclass: the Golem ignores troops.
     golem.targets = TargetFilter{true, false, /*buildingsOnly=*/true};
     golem.damageModifiers = {
-        DamageModifier{1.5f, {}, {}, {std::string(cards::KingTower), std::string(cards::QueenTower)}, {}},
+        DamageModifier{.multiplier = 1.5f,
+                       .againstCards = {std::string(cards::KingTower), std::string(cards::QueenTower)}},
     };
     registry.define(golem);
 
     CardSpec pekka = troop(cards::Pekka, "P.E.K.K.A", 'P', 600, 70, 1, 0.75f, 1.8f, 4.0f, ArmorClass::Heavy);
     pekka.targets = TargetFilter{true, false};
     pekka.damageModifiers = {
-        DamageModifier{1.2f, {}, {}, {}, {}},                                  // heavy armor penetration
-        DamageModifier{1.3f, {}, {}, {std::string(cards::Canon)}, {}},         // hits buildings harder
+        DamageModifier{.multiplier = 1.2f},                                             // armor penetration
+        DamageModifier{.multiplier = 1.3f, .againstCards = {std::string(cards::Canon)}},  // hits buildings harder
     };
     registry.define(pekka);
 
@@ -123,11 +124,9 @@ CardRegistry CardRegistry::withDefaultCards() {
     goblins.movement = MovementStyle::Zigzag;
     goblins.targets = TargetFilter{true, false};
     goblins.damageModifiers = {
-        DamageModifier{1.1f,
-                       {},
-                       {},
-                       {std::string(cards::Knight), std::string(cards::Wizard), std::string(cards::Archers)},
-                       {}},
+        DamageModifier{.multiplier = 1.1f,
+                       .againstCards = {std::string(cards::Knight), std::string(cards::Wizard),
+                                        std::string(cards::Archers)}},
     };
     registry.define(goblins);
 
@@ -140,7 +139,7 @@ CardRegistry CardRegistry::withDefaultCards() {
     CardSpec wizard = troop(cards::Wizard, "Wizard", 'W', 500, 65, 5, 1.00f, 1.4f, 4.0f, ArmorClass::Light);
     wizard.targets = TargetFilter{true, true};
     wizard.damageModifiers = {
-        DamageModifier{1.2f, {}, {MovementDomain::Air}, {}, {}},  // splash is effective against air
+        DamageModifier{.multiplier = 1.2f, .againstDomain = {MovementDomain::Air}},  // splash hits air harder
     };
     registry.define(wizard);
 

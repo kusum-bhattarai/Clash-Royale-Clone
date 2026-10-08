@@ -14,9 +14,7 @@ bool containsOrEmpty(const std::vector<T>& values, const T& needle) {
 
 /// A modifier applies when every condition it specifies matches. Conditions
 /// left empty match anything, so a modifier with none always applies.
-bool applies(const DamageModifier& modifier, const Entity& target) {
-    const CardSpec& spec = target.spec();
-
+bool applies(const DamageModifier& modifier, const CardSpec& spec) {
     if (!containsOrEmpty(modifier.againstArmor, spec.armor)) {
         return false;
     }
@@ -34,6 +32,16 @@ bool applies(const DamageModifier& modifier, const Entity& target) {
 
 }  // namespace
 
+float matchupMultiplier(const CardSpec& attacker, const CardSpec& target) {
+    float multiplier = 1.0f;
+    for (const DamageModifier& modifier : attacker.damageModifiers) {
+        if (applies(modifier, target)) {
+            multiplier *= modifier.multiplier;
+        }
+    }
+    return multiplier;
+}
+
 bool isWithinRange(const Entity& attacker, const Entity& target, int range) {
     const int dx = attacker.getX() - target.getX();
     const int dy = attacker.getY() - target.getY();
@@ -45,12 +53,7 @@ int resolveDamage(const Entity& attacker, const Entity& target, const CombatRule
     // closed EntityType enum, so a downstream card could not participate in
     // either. They are now data: the attacker carries its modifiers and the
     // target carries its incoming multiplier.
-    float multiplier = 1.0f;
-    for (const DamageModifier& modifier : attacker.spec().damageModifiers) {
-        if (applies(modifier, target)) {
-            multiplier *= modifier.multiplier;
-        }
-    }
+    const float multiplier = matchupMultiplier(attacker.spec(), target.spec());
 
     const float scaled =
         static_cast<float>(attacker.getDamage()) * multiplier * target.spec().incomingDamageMultiplier;

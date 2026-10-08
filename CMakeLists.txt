@@ -18,6 +18,7 @@ option(CR_BUILD_TUI      "Build the terminal front-end library and playable game
 option(CR_BUILD_TESTING  "Build the test suite (downloads GoogleTest)"            ${PROJECT_IS_TOP_LEVEL})
 option(CR_INSTALL        "Generate install and package-config rules"              ${PROJECT_IS_TOP_LEVEL})
 option(CR_BUILD_BENCHMARKS "Build the pathfinding benchmark"                      OFF)
+option(CR_BUILD_EXAMPLES "Build the example programs"                            ${PROJECT_IS_TOP_LEVEL})
 
 include(GNUInstallDirs)
 
@@ -48,7 +49,8 @@ add_library(cr_core
     src/path/flow_field.cpp
     src/path/direct.cpp
     src/path/navigator.cpp
-    src/ai/random_controller.cpp)
+    src/ai/random_controller.cpp
+    src/ai/strategic_controller.cpp)
 add_library(ClashRoyale::core ALIAS cr_core)
 
 target_include_directories(cr_core PUBLIC
@@ -84,6 +86,20 @@ if(CR_BUILD_TUI)
 endif()
 
 # ---------------------------------------------------------------------------
+# Examples
+#
+# Built by default at top level so they cannot quietly stop compiling as the
+# API moves; they are the first thing a new user reads.
+# ---------------------------------------------------------------------------
+if(CR_BUILD_EXAMPLES)
+    foreach(example headless_match custom_card)
+        add_executable(${example} examples/${example}.cpp)
+        target_link_libraries(${example} PRIVATE cr_core)
+        target_compile_options(${example} PRIVATE ${CR_WARNINGS})
+    endforeach()
+endif()
+
+# ---------------------------------------------------------------------------
 # Benchmarks
 # ---------------------------------------------------------------------------
 if(CR_BUILD_BENCHMARKS)
@@ -114,7 +130,8 @@ if(CR_BUILD_TESTING)
         tests/test_simulation.cpp
         tests/test_characterization.cpp
         tests/test_card_registry.cpp
-        tests/test_pathfinding.cpp)
+        tests/test_pathfinding.cpp
+        tests/test_strategic_ai.cpp)
     # The suite links cr_core only: nothing under tests/ touches the front-end.
     target_link_libraries(run_tests PRIVATE gtest_main cr_core)
     target_include_directories(run_tests PRIVATE tests)

@@ -64,6 +64,14 @@ struct TargetFilter {
 ///
 /// Every populated condition must match for the multiplier to apply; an empty
 /// condition matches anything. A modifier with no conditions always applies.
+///
+/// Write these with designated initializers, naming only the conditions that
+/// matter:
+/// \code
+///   DamageModifier{.multiplier = 2.0f, .againstArmor = {ArmorClass::Heavy}}
+/// \endcode
+/// Positional initialization needs a `{}` placeholder per skipped field and
+/// warns under -Wmissing-field-initializers.
 struct DamageModifier {
     float multiplier = 1.0f;
 

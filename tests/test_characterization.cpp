@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <limits>
 #include <string_view>
 
 #include <algorithm>
@@ -77,6 +79,56 @@ TEST(ArenaGeometry, BoardDimensions) {
     EXPECT_EQ(kArenaHeight, 35);
 }
 
+TEST(ArenaGeometry, TowerLayoutIsMirroredOnBothAxes) {
+    Simulation sim;
+    const int river = sim.arena().riverRows().front();
+    const int centre = kArenaWidth / 2;
+
+    // For every tower one player owns, the other must own its mirror image.
+    // Without this, a match between equal opponents is decided by side.
+    for (const auto& entity : sim.board().getEntities()) {
+        const int mirroredX = 2 * centre - entity->getX();
+        const int mirroredY = 2 * river - entity->getY();
+
+        bool foundMirror = false;
+        for (const auto& other : sim.board().getEntities()) {
+            if (other->getIsPlayer() == entity->getIsPlayer()) {
+                continue;
+            }
+            if (other->getX() == mirroredX && other->getY() == mirroredY &&
+                other->cardId() == entity->cardId()) {
+                foundMirror = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(foundMirror) << entity->cardId() << " at (" << entity->getX() << "," << entity->getY()
+                                 << ") has no mirror on the other side";
+    }
+}
+
+TEST(ArenaGeometry, BothPlayersSpawnTheSameDistanceFromEnemyTowers) {
+    Simulation sim;
+
+    double distances[2] = {0.0, 0.0};
+    for (bool isPlayerOne : {true, false}) {
+        const SpawnPoint spawnAt = spawnPointFor(defaultCards().get(cards::Knight), Lane::LEFT, isPlayerOne);
+        int nearestSq = std::numeric_limits<int>::max();
+        for (const auto& entity : sim.board().getEntities()) {
+            if (entity->getIsPlayer() == isPlayerOne || entity->spec().towerRole == TowerRole::None) {
+                continue;
+            }
+            const int dx = entity->getX() - spawnAt.x;
+            const int dy = entity->getY() - spawnAt.y;
+            nearestSq = std::min(nearestSq, dx * dx + dy * dy);
+        }
+        distances[isPlayerOne ? 0 : 1] = std::sqrt(static_cast<double>(nearestSq));
+    }
+
+    // Player two used to spawn 11.70 tiles from the nearest enemy tower where
+    // player one spawned 15.52 away.
+    EXPECT_NEAR(distances[0], distances[1], 0.01) << "one side has a shorter run at the other's towers";
+}
+
 TEST(ArenaGeometry, MatchStartsWithSixTowersAtFixedPositions) {
     Simulation sim;
     const auto& entities = sim.board().getEntities();
@@ -88,17 +140,17 @@ TEST(ArenaGeometry, MatchStartsWithSixTowersAtFixedPositions) {
         int x, y;
         bool isPlayer;
     };
-    // centerX = 19, sideOffset = 12. Note the left queen towers sit at x=6 and
-    // the right at x=31 -- 13 and 12 tiles from center respectively. The arena
-    // is NOT horizontally symmetric, due to the `- 1 -` in the left-tower
-    // offset in Simulation's constructor.
+    // Mirrored about x = 20 and about the river row 17. The original layout was
+    // asymmetric both ways -- player two's towers sat 14 and 12 rows from the
+    // midline against player one's 10 and 8, and the left queens were a tile
+    // further out than the right -- which measurably favoured player one.
     const Expected expected[] = {
-        {cards::KingTower, 19, 3, false},
-        {cards::QueenTower, 6, 5, false},
-        {cards::QueenTower, 31, 5, false},
-        {cards::KingTower, 19, 27, true},
-        {cards::QueenTower, 6, 25, true},
-        {cards::QueenTower, 31, 25, true},
+        {cards::KingTower, 20, 7, false},
+        {cards::QueenTower, 8, 9, false},
+        {cards::QueenTower, 32, 9, false},
+        {cards::KingTower, 20, 27, true},
+        {cards::QueenTower, 8, 25, true},
+        {cards::QueenTower, 32, 25, true},
     };
 
     for (size_t i = 0; i < std::size(expected); ++i) {
