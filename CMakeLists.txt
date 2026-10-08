@@ -17,6 +17,7 @@ endif()
 option(CR_BUILD_TUI      "Build the terminal front-end library and playable game" ${PROJECT_IS_TOP_LEVEL})
 option(CR_BUILD_TESTING  "Build the test suite (downloads GoogleTest)"            ${PROJECT_IS_TOP_LEVEL})
 option(CR_INSTALL        "Generate install and package-config rules"              ${PROJECT_IS_TOP_LEVEL})
+option(CR_BUILD_BENCHMARKS "Build the pathfinding benchmark"                      OFF)
 
 include(GNUInstallDirs)
 
@@ -43,6 +44,9 @@ add_library(cr_core
     src/sim/combat.cpp
     src/sim/card_registry.cpp
     src/sim/simulation.cpp
+    src/path/astar.cpp
+    src/path/flow_field.cpp
+    src/path/direct.cpp
     src/ai/random_controller.cpp)
 add_library(ClashRoyale::core ALIAS cr_core)
 
@@ -79,6 +83,15 @@ if(CR_BUILD_TUI)
 endif()
 
 # ---------------------------------------------------------------------------
+# Benchmarks
+# ---------------------------------------------------------------------------
+if(CR_BUILD_BENCHMARKS)
+    add_executable(path_benchmark benchmarks/path_benchmark.cpp)
+    target_link_libraries(path_benchmark PRIVATE cr_core)
+    target_compile_options(path_benchmark PRIVATE ${CR_WARNINGS})
+endif()
+
+# ---------------------------------------------------------------------------
 # Tests
 #
 # Guarded so that consuming this project via FetchContent or add_subdirectory
@@ -99,7 +112,8 @@ if(CR_BUILD_TESTING)
         tests/test_entity_behavior.cpp
         tests/test_simulation.cpp
         tests/test_characterization.cpp
-        tests/test_card_registry.cpp)
+        tests/test_card_registry.cpp
+        tests/test_pathfinding.cpp)
     # The suite links cr_core only: nothing under tests/ touches the front-end.
     target_link_libraries(run_tests PRIVATE gtest_main cr_core)
     target_include_directories(run_tests PRIVATE tests)

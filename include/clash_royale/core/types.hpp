@@ -31,6 +31,20 @@ inline constexpr int kArenaHeight = 35;
 /// reads the `dt` threaded through from Simulation::step().
 inline constexpr float kDefaultTimeStep = 0.1f;
 
+/// An integer tile coordinate.
+struct Point {
+    int x = 0;
+    int y = 0;
+};
+
+inline bool operator==(Point a, Point b) {
+    return a.x == b.x && a.y == b.y;
+}
+
+inline bool operator!=(Point a, Point b) {
+    return !(a == b);
+}
+
 /// Whether a unit travels on the ground or through the air.
 ///
 /// Lives here rather than beside the card types because the arena's passability
