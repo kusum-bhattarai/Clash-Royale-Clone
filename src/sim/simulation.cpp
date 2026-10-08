@@ -41,6 +41,7 @@ SpawnPoint spawnPointFor(const CardSpec& spec, Lane lane, bool isPlayerOne) {
 Simulation::Simulation(MatchConfig config)
     : m_config(std::move(config)),
       m_rng(m_config.deterministic ? Rng(m_config.seed) : Rng::fromEntropy()),
+      m_board(m_config.arena),
       m_elixirOne(m_config.startingElixir),
       m_elixirTwo(m_config.startingElixir) {
     m_board.setCombatRules(m_config.combat);
@@ -62,13 +63,13 @@ Simulation::Simulation(MatchConfig config)
     const CardSpec& queen = *queenSpec;
 
     // Player two (the AI) occupies the top of the arena, player one the bottom.
-    m_board.addEntity(createEntity(king, kCenterX, kPlayerTwoKingY, false, Lane::LEFT));
-    m_board.addEntity(createEntity(queen, kCenterX - 1 - kSideOffset, kPlayerTwoQueenY, false, Lane::LEFT));
-    m_board.addEntity(createEntity(queen, kCenterX + kSideOffset, kPlayerTwoQueenY, false, Lane::RIGHT));
+    m_board.spawn(king, kCenterX, kPlayerTwoKingY, false, Lane::LEFT);
+    m_board.spawn(queen, kCenterX - 1 - kSideOffset, kPlayerTwoQueenY, false, Lane::LEFT);
+    m_board.spawn(queen, kCenterX + kSideOffset, kPlayerTwoQueenY, false, Lane::RIGHT);
 
-    m_board.addEntity(createEntity(king, kCenterX, kPlayerOneKingY, true, Lane::LEFT));
-    m_board.addEntity(createEntity(queen, kCenterX - 1 - kSideOffset, kPlayerOneQueenY, true, Lane::LEFT));
-    m_board.addEntity(createEntity(queen, kCenterX + kSideOffset, kPlayerOneQueenY, true, Lane::RIGHT));
+    m_board.spawn(king, kCenterX, kPlayerOneKingY, true, Lane::LEFT);
+    m_board.spawn(queen, kCenterX - 1 - kSideOffset, kPlayerOneQueenY, true, Lane::LEFT);
+    m_board.spawn(queen, kCenterX + kSideOffset, kPlayerOneQueenY, true, Lane::RIGHT);
 }
 
 void Simulation::step(float dt) {
@@ -118,7 +119,7 @@ bool Simulation::deploy(std::string_view cardId, Lane lane, bool isPlayerOne) {
 
     const CardSpec& spec = m_config.cards.get(cardId);
     const SpawnPoint spawn = spawnPointFor(spec, lane, isPlayerOne);
-    m_board.addEntity(createEntity(spec, spawn.x, spawn.y, isPlayerOne, lane));
+    m_board.spawn(spec, spawn.x, spawn.y, isPlayerOne, lane);
 
     float& pool = isPlayerOne ? m_elixirOne : m_elixirTwo;
     pool -= spec.elixirCost;

@@ -6,19 +6,21 @@
 #include <iostream>
 #include <limits>
 
+#include "clash_royale/core/arena.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/sim/combat.hpp"
 
 namespace cr {
 namespace {
 
+/// -1, 0 or +1 according to the sign of `value`.
 int signum(int value) {
-    return (value > 0) ? 1 : -1;
+    return (value > 0) ? 1 : (value < 0 ? -1 : 0);
 }
 
 }  // namespace
 
-Entity::Entity(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane)
+Entity::Entity(const CardSpec& spec, const Arena& arena, int x, int y, bool isPlayer, Lane lane)
     : m_spec(&spec),
       m_x(x),
       m_y(y),
@@ -29,9 +31,9 @@ Entity::Entity(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane)
       m_isPlayer(isPlayer),
       m_homeLane(lane),
       m_stepCount(0) {
-    if (x < 1 || x >= kArenaWidth - 1 || y < 1 || y >= kArenaHeight - 1) {
+    if (!arena.inInterior(x, y)) {
         logWarning("Initial position out of bounds, clamping");
-        clampToArena();
+        arena.clampToInterior(m_x, m_y);
     }
     if (m_maxHealth <= 0) {
         logWarning("Card health invalid, setting to 1");
@@ -127,21 +129,72 @@ std::shared_ptr<Entity> Entity::findTarget(const Board& board) const {
     return best;
 }
 
-void Entity::stepAlongDominantAxis(int tx, int ty) {
+bool Entity::tryStep(const Arena& arena, int dx, int dy) {
+    if (dx == 0 && dy == 0) {
+        return false;
+    }
+    const int nx = m_x + dx;
+    const int ny = m_y + dy;
+    if (!arena.isPassable(nx, ny, m_spec->domain)) {
+        return false;
+    }
+    m_x = nx;
+    m_y = ny;
+    return true;
+}
+
+void Entity::stepAlongDominantAxis(const Arena& arena, int tx, int ty) {
     const int dx = tx - m_x;
     const int dy = ty - m_y;
 
+    const int stepX = signum(dx);
+    const int stepY = signum(dy);
+
     // Ties resolve vertically, matching the original behavior.
-    if (std::abs(dx) > std::abs(dy)) {
-        m_x += signum(dx);
-    } else if (dy != 0) {
-        m_y += signum(dy);
+    const bool horizontalFirst = std::abs(dx) > std::abs(dy);
+
+    // Falling back to the other axis is what lets a unit walk the length of a
+    // bridge: the step it wants may be sideways into water, and refusing it
+    // without an alternative would leave the unit stuck on the bank.
+    if (horizontalFirst) {
+        if (!tryStep(arena, stepX, 0)) {
+            tryStep(arena, 0, stepY);
+        }
+    } else {
+        if (!tryStep(arena, 0, stepY)) {
+            tryStep(arena, stepX, 0);
+        }
     }
 }
 
-void Entity::clampToArena() {
-    m_x = std::max(1, std::min(m_x, kArenaWidth - 2));
-    m_y = std::max(1, std::min(m_y, kArenaHeight - 2));
+void Entity::waypointToward(const Arena& arena, const Entity& target, int& outX, int& outY) const {
+    outX = target.getX();
+    outY = target.getY();
+
+    // Air units ignore terrain, and an arena without a river needs no routing.
+    if (m_spec->domain == MovementDomain::Air || !arena.hasRiver()) {
+        return;
+    }
+
+    const int mySide = arena.riverSide(m_y);
+    const int targetSide = arena.riverSide(outY);
+
+    // Already on the target's side, and not standing on the river itself.
+    if (mySide == targetSide && mySide != 0) {
+        return;
+    }
+
+    // Steer for this unit's crossing, aiming at the first row past the river on
+    // the target's side so the unit commits to the bridge and walks off it
+    // rather than stopping on top.
+    outX = arena.bridgeColumnFor(m_homeLane, m_x);
+    if (targetSide > 0) {
+        outY = arena.riverRows().back() + 1;
+    } else if (targetSide < 0) {
+        outY = arena.riverRows().front() - 1;
+    } else {
+        outY = target.getY();  // the target is itself on the crossing
+    }
 }
 
 void Entity::move(const Board& board) {
@@ -154,26 +207,40 @@ void Entity::move(const Board& board) {
         return;
     }
 
-    const int tx = target->getX();
-    const int ty = target->getY();
-    const int dx = tx - m_x;
-    const int dy = ty - m_y;
+    const Arena& arena = board.arena();
+
+    // Ranged units stop once the real target is in reach, regardless of
+    // whether they are still routing toward a crossing.
+    if (m_spec->movement == MovementStyle::HoldAtRange &&
+        isWithinRange(*this, *target, m_spec->attackRange)) {
+        return;
+    }
+
+    int goalX = 0;
+    int goalY = 0;
+    waypointToward(arena, *target, goalX, goalY);
+
+    const int dx = goalX - m_x;
+    const int dy = goalY - m_y;
+    const int stepX = signum(dx);
+    const int stepY = signum(dy);
 
     switch (m_spec->movement) {
         case MovementStyle::Stationary:
             return;
 
         case MovementStyle::AxisStep:
-            stepAlongDominantAxis(tx, ty);
+        case MovementStyle::HoldAtRange:
+            stepAlongDominantAxis(arena, goalX, goalY);
             break;
 
         case MovementStyle::Diagonal:
-            // Closes on both axes in the same step.
-            if (dx != 0) {
-                m_x += signum(dx);
-            }
-            if (dy != 0) {
-                m_y += signum(dy);
+            // Closes on both axes in the same step, then settles for one axis
+            // if the diagonal tile is not enterable.
+            if (!tryStep(arena, stepX, stepY)) {
+                if (!tryStep(arena, stepX, 0)) {
+                    tryStep(arena, 0, stepY);
+                }
             }
             break;
 
@@ -181,30 +248,16 @@ void Entity::move(const Board& board) {
             // Alternates which axis it closes on, rather than exhausting one
             // before starting the other.
             if ((m_stepCount % 2) == 0) {
-                if (dx != 0) {
-                    m_x += signum(dx);
-                } else if (dy != 0) {
-                    m_y += signum(dy);
+                if (!tryStep(arena, stepX, 0)) {
+                    tryStep(arena, 0, stepY);
                 }
             } else {
-                if (dy != 0) {
-                    m_y += signum(dy);
-                } else if (dx != 0) {
-                    m_x += signum(dx);
+                if (!tryStep(arena, 0, stepY)) {
+                    tryStep(arena, stepX, 0);
                 }
             }
             break;
-
-        case MovementStyle::HoldAtRange:
-            // Stops advancing once the target is within reach.
-            if (isWithinRange(*this, *target, m_spec->attackRange)) {
-                return;
-            }
-            stepAlongDominantAxis(tx, ty);
-            break;
     }
-
-    clampToArena();
 }
 
 void Entity::logWarning(const std::string& message) const {

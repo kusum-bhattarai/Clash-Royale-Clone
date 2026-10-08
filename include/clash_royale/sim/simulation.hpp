@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 
+#include "clash_royale/core/arena.hpp"
 #include "clash_royale/core/rng.hpp"
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/board.hpp"
@@ -34,6 +35,9 @@ struct MatchConfig {
     /// a custom roster; entities hold references into it, so the simulation
     /// keeps its own copy for the duration of the match.
     CardRegistry cards = CardRegistry::withDefaultCards();
+
+    /// The field this match is played on, including its terrain.
+    Arena arena = Arena::standard();
 
     /// Which cards are placed as the starting towers.
     ///
@@ -102,6 +106,7 @@ public:
 
     Board& board() { return m_board; }
     const Board& board() const { return m_board; }
+    const Arena& arena() const { return m_board.arena(); }
     Rng& rng() { return m_rng; }
 
 private:

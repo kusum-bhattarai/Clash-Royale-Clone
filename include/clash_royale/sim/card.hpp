@@ -10,14 +10,9 @@
 
 namespace cr {
 
+class Arena;
 class Board;
 class Entity;
-
-/// Whether a unit travels on the ground or through the air.
-enum class MovementDomain {
-    Ground,
-    Air,
-};
 
 /// How a unit steps toward its target.
 ///
@@ -120,7 +115,9 @@ struct CardSpec {
     /// Outgoing damage bonuses this unit enjoys against particular targets.
     std::vector<DamageModifier> damageModifiers;
 
-    /// Tiles further back from the lane spawn line this unit is placed.
+    /// Tiles toward midfield this unit is placed, relative to the lane spawn
+    /// line. The Canon uses 2, which puts it slightly ahead of where troops
+    /// appear rather than behind them.
     int spawnSetback = 0;
 
     /// Optional hook for units whose behavior cannot be expressed as data.
@@ -128,7 +125,8 @@ struct CardSpec {
     /// When null, a plain Entity driven by this spec is created. Set it to
     /// return your own Entity subclass to override `move()`, `findTarget()` or
     /// `update()` while still describing stats declaratively.
-    std::function<std::shared_ptr<Entity>(const CardSpec&, int x, int y, bool isPlayer, Lane lane)> factory;
+    std::function<std::shared_ptr<Entity>(const CardSpec&, const Arena&, int x, int y, bool isPlayer, Lane lane)>
+        factory;
 };
 
 }  // namespace cr

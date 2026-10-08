@@ -37,6 +37,7 @@ endif()
 # and can be driven headlessly by bots, tests and training harnesses.
 # ---------------------------------------------------------------------------
 add_library(cr_core
+    src/core/arena.cpp
     src/sim/entity.cpp
     src/sim/board.cpp
     src/sim/combat.cpp

@@ -2,10 +2,20 @@
 
 #include <algorithm>
 #include <climits>
+#include <utility>
 
+#include "clash_royale/sim/card_registry.hpp"
 #include "clash_royale/sim/combat.hpp"
 
 namespace cr {
+
+Board::Board(Arena arena) : m_arena(std::move(arena)) {}
+
+std::shared_ptr<Entity> Board::spawn(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane) {
+    std::shared_ptr<Entity> entity = createEntity(spec, m_arena, x, y, isPlayer, lane);
+    entities.push_back(entity);
+    return entity;
+}
 
 void Board::addEntity(std::shared_ptr<Entity> entity) {
     entities.push_back(std::move(entity));

@@ -1,5 +1,6 @@
 #include "clash_royale/tui/renderer.hpp"
 #include <iostream>
+#include <algorithm>
 #include <iomanip>
 
 namespace cr {
@@ -26,6 +27,8 @@ void Renderer::clear() {
 }
 
 void Renderer::drawBoard(const Board& board) {
+    drawTerrain(board.arena());
+
     const auto& entities = board.getEntities();
     
     for (const auto& entity : entities) {
@@ -41,6 +44,30 @@ void Renderer::drawBoard(const Board& board) {
             // that never dropped below two thirds, and a 120 HP Archer's bar
             // barely moved. Entities know their own maximum.
             drawHealthBar(x, y + 1, entity->getHealth(), entity->getMaxHealth());
+        }
+    }
+}
+
+void Renderer::drawTerrain(const Arena& arena) {
+    // Drawn before the entities so units and their health bars sit on top.
+    const int width = std::min(arena.width(), kArenaWidth);
+    const int height = std::min(arena.height(), kArenaHeight);
+
+    for (int y = 1; y < height - 1; ++y) {
+        for (int x = 1; x < width - 1; ++x) {
+            switch (arena.tile(x, y)) {
+                case Tile::Water:
+                    buffer[y][x] = '~';
+                    break;
+                case Tile::Bridge:
+                    buffer[y][x] = '=';
+                    break;
+                case Tile::Blocked:
+                    buffer[y][x] = '#';
+                    break;
+                case Tile::Ground:
+                    break;
+            }
         }
     }
 }

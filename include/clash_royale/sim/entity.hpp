@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "clash_royale/core/arena.hpp"
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/card.hpp"
 
@@ -25,7 +26,10 @@ class Entity {
 public:
     /// `spec` must outlive this entity. A CardRegistry guarantees that for any
     /// spec it hands out.
-    Entity(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane);
+    ///
+    /// `arena` is used only to clamp the starting position and is not retained;
+    /// movement uses the arena of whichever Board holds this entity.
+    Entity(const CardSpec& spec, const Arena& arena, int x, int y, bool isPlayer, Lane lane);
     virtual ~Entity() = default;
 
     const CardSpec& spec() const { return *m_spec; }
@@ -84,11 +88,25 @@ protected:
     /// Takes one movement step, following the card's MovementStyle.
     virtual void move(const Board& board);
 
-    /// Moves one tile along whichever axis is further from (tx, ty).
-    void stepAlongDominantAxis(int tx, int ty);
+    /// The tile this entity is actually steering for.
+    ///
+    /// For an air unit, or a ground unit already on the target's side of the
+    /// river, this is the target itself. A ground unit that has to cross first
+    /// steers for its lane's bridge instead -- which is what finally gives
+    /// `Lane` an effect on behavior.
+    ///
+    /// This two-leg routing is deliberately the simplest thing that keeps units
+    /// off the water. It is the seam the pathfinder replaces: a real search
+    /// handles arbitrary terrain, not just one river.
+    void waypointToward(const Arena& arena, const Entity& target, int& outX, int& outY) const;
 
-    /// Keeps this entity inside the playable interior of the arena.
-    void clampToArena();
+    /// Moves one tile along whichever axis is further from (tx, ty), refusing
+    /// tiles this entity cannot enter and trying the other axis instead.
+    void stepAlongDominantAxis(const Arena& arena, int tx, int ty);
+
+    /// Moves one tile on `axis` if the destination is passable.
+    /// Returns whether it moved.
+    bool tryStep(const Arena& arena, int dx, int dy);
 
     void logWarning(const std::string& message) const;
 

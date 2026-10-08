@@ -42,8 +42,21 @@ void tick(const std::shared_ptr<Entity>& entity, const Board& board, int ticks) 
 
 // Builds a board holding `self` plus a single enemy at (ex, ey), so movement
 // can be observed against exactly one target with no ambiguity.
+//
+// The arena has no terrain, which matters: on the shipped arena a ground unit
+// whose target is across the river steers for a bridge instead of the target,
+// so a board with a river measures routing rather than movement shape. River
+// behavior has its own section below.
 Board boardWith(const std::shared_ptr<Entity>& self, std::string_view enemyCard, int ex, int ey) {
-    Board board;
+    Board board = openBoard();
+    board.addEntity(self);
+    board.addEntity(spawn(enemyCard, ex, ey, !self->getIsPlayer()));
+    return board;
+}
+
+// As boardWith, but on the shipped arena, so terrain is in play.
+Board terrainBoardWith(const std::shared_ptr<Entity>& self, std::string_view enemyCard, int ex, int ey) {
+    Board board;  // Arena::standard()
     board.addEntity(self);
     board.addEntity(spawn(enemyCard, ex, ey, !self->getIsPlayer()));
     return board;
@@ -111,11 +124,11 @@ TEST(ArenaGeometry, MatchStartsWithFiveElixirEach) {
 TEST(EntityConstruction, ClampsPositionsOutsideTheArena) {
     const CardSpec& knight = defaultCards().get(cards::Knight);
 
-    Entity tooLow(knight, -5, -5, true, Lane::LEFT);
+    Entity tooLow(knight, standardArena(), -5, -5, true, Lane::LEFT);
     EXPECT_EQ(tooLow.getX(), 1);
     EXPECT_EQ(tooLow.getY(), 1);
 
-    Entity tooHigh(knight, 999, 999, true, Lane::LEFT);
+    Entity tooHigh(knight, standardArena(), 999, 999, true, Lane::LEFT);
     EXPECT_EQ(tooHigh.getX(), kArenaWidth - 2);   // 38
     EXPECT_EQ(tooHigh.getY(), kArenaHeight - 2);  // 33
 }
@@ -129,7 +142,7 @@ TEST(EntityConstruction, RaisesNonPositiveHealthToOne) {
     broken.symbol = 'X';
     broken.health = 0;
 
-    Entity entity(registry.define(broken), 10, 10, true, Lane::LEFT);
+    Entity entity(registry.define(broken), standardArena(), 10, 10, true, Lane::LEFT);
 
     EXPECT_EQ(entity.getHealth(), 1);
     // The maximum is corrected too. It previously kept the invalid value while
@@ -278,6 +291,156 @@ TEST(MovementShape, GoblinsAlternateAxesAsTheyClose) {
     tick(goblins, board, kTicksPerStep);
     EXPECT_EQ(goblins->getX(), 12);
     EXPECT_EQ(goblins->getY(), 11);
+}
+
+// ---------------------------------------------------------------------------
+// River and bridges
+//
+// The arena gained terrain, which is what finally gives `Lane` an effect: it
+// was recorded on every entity and read by nothing, because the field was open.
+// ---------------------------------------------------------------------------
+
+TEST(ArenaTerrain, StandardArenaHasARiverOnTheMidlineWithABridgePerLane) {
+    const Arena& arena = standardArena();
+
+    ASSERT_TRUE(arena.hasRiver());
+    ASSERT_EQ(arena.riverRows().size(), 1u);
+    EXPECT_EQ(arena.riverRows().front(), kArenaHeight / 2);  // 17
+
+    // Bridges sit on the lane spawn columns.
+    ASSERT_EQ(arena.bridgeColumns().size(), 2u);
+    EXPECT_EQ(arena.bridgeColumns().front(), kArenaWidth / 4);      // 10
+    EXPECT_EQ(arena.bridgeColumns().back(), kArenaWidth * 3 / 4);   // 30
+}
+
+TEST(ArenaTerrain, RiverIsWaterExceptWhereTheBridgesCross) {
+    const Arena& arena = standardArena();
+    const int row = arena.riverRows().front();
+
+    // Three tiles wide, centred on each lane column.
+    for (int x : {9, 10, 11, 29, 30, 31}) {
+        EXPECT_EQ(arena.tile(x, row), Tile::Bridge) << "x = " << x;
+    }
+    for (int x : {1, 8, 12, 20, 28, 32, 38}) {
+        EXPECT_EQ(arena.tile(x, row), Tile::Water) << "x = " << x;
+    }
+}
+
+TEST(ArenaTerrain, GroundUnitsCannotEnterWaterButAirCan) {
+    const Arena& arena = standardArena();
+    const int row = arena.riverRows().front();
+
+    EXPECT_FALSE(arena.isPassable(20, row, MovementDomain::Ground));
+    EXPECT_TRUE(arena.isPassable(20, row, MovementDomain::Air));
+
+    // A bridge is walkable by both.
+    EXPECT_TRUE(arena.isPassable(10, row, MovementDomain::Ground));
+    EXPECT_TRUE(arena.isPassable(10, row, MovementDomain::Air));
+
+    // The border is impassable to everything.
+    EXPECT_FALSE(arena.isPassable(0, 5, MovementDomain::Air));
+    EXPECT_FALSE(arena.isPassable(5, 0, MovementDomain::Air));
+}
+
+TEST(ArenaTerrain, NoFixedPositionLandsInTheRiver) {
+    // The river is one row wide because that is the only placement clear of
+    // every tower, troop spawn and Canon spawn. Widening it would drop a
+    // building into the water.
+    const Arena& arena = standardArena();
+    Simulation sim;
+
+    for (const auto& entity : sim.board().getEntities()) {
+        EXPECT_NE(arena.tile(entity->getX(), entity->getY()), Tile::Water)
+            << entity->cardId() << " starts in the river";
+    }
+
+    for (Lane lane : {Lane::LEFT, Lane::RIGHT}) {
+        for (bool isPlayerOne : {true, false}) {
+            for (std::string_view card : {cards::Knight, cards::Canon}) {
+                const SpawnPoint point = spawnPointFor(defaultCards().get(card), lane, isPlayerOne);
+                EXPECT_NE(arena.tile(point.x, point.y), Tile::Water)
+                    << card << " spawns in the river";
+            }
+        }
+    }
+}
+
+TEST(RiverRouting, GroundUnitsSteerForTheirLaneBridgeRatherThanStraightAcross) {
+    // A Knight in the left lane, with its target directly across the river in
+    // the right lane. Without terrain it would walk straight at the target and
+    // into the water.
+    auto knight = spawn(cards::Knight, 10, 12, true, Lane::LEFT);
+    Board board = terrainBoardWith(knight, cards::QueenTower, 31, 25);
+
+    tick(knight, board, 400);
+
+    // It must have crossed, and done so over its own bridge.
+    EXPECT_GT(knight->getY(), standardArena().riverRows().front())
+        << "the knight never got across the river";
+}
+
+TEST(RiverRouting, LaneDecidesWhichCrossingIsUsed) {
+    const int riverRow = standardArena().riverRows().front();
+
+    // Two identical units starting at the same place, differing only in lane.
+    // Each should cross at its own bridge.
+    for (const auto& [lane, expectedColumn] :
+         {std::pair{Lane::LEFT, 10}, std::pair{Lane::RIGHT, 30}}) {
+        auto knight = spawn(cards::Knight, 20, 12, true, lane);
+        Board board = terrainBoardWith(knight, cards::KingTower, 19, 27);
+
+        int crossingColumn = -1;
+        for (int i = 0; i < 400 && crossingColumn < 0; ++i) {
+            knight->update(board);
+            if (knight->getY() == riverRow) {
+                crossingColumn = knight->getX();
+            }
+        }
+
+        ASSERT_GE(crossingColumn, 0) << "the unit never reached the river";
+        EXPECT_NEAR(crossingColumn, expectedColumn, 1)
+            << "a unit in this lane crossed at the wrong bridge";
+    }
+}
+
+TEST(RiverRouting, GroundUnitsNeverStandOnWater) {
+    auto knight = spawn(cards::Knight, 4, 12, true, Lane::LEFT);
+    Board board = terrainBoardWith(knight, cards::QueenTower, 31, 25);
+
+    for (int i = 0; i < 600; ++i) {
+        knight->update(board);
+        ASSERT_NE(standardArena().tile(knight->getX(), knight->getY()), Tile::Water)
+            << "knight entered the water at (" << knight->getX() << "," << knight->getY() << ")";
+    }
+}
+
+TEST(RiverRouting, AirUnitsIgnoreTheRiverEntirely) {
+    // A Dragon takes the straight diagonal, crossing wherever it likes.
+    auto dragon = spawn(cards::Dragon, 20, 12, true, Lane::LEFT);
+    Board board = terrainBoardWith(dragon, cards::QueenTower, 31, 25);
+
+    bool crossedOverWater = false;
+    for (int i = 0; i < 200; ++i) {
+        dragon->update(board);
+        if (standardArena().tile(dragon->getX(), dragon->getY()) == Tile::Water) {
+            crossedOverWater = true;
+        }
+    }
+
+    EXPECT_TRUE(crossedOverWater) << "the dragon detoured to a bridge instead of flying over";
+    EXPECT_GT(dragon->getY(), standardArena().riverRows().front());
+}
+
+TEST(RiverRouting, AnArenaWithoutARiverNeedsNoRouting) {
+    // Terrain is optional: an open arena behaves exactly as before.
+    auto knight = spawn(cards::Knight, 10, 10, true, Lane::RIGHT);
+    Board board = boardWith(knight, cards::QueenTower, 10, 30);
+
+    tick(knight, board, 10);
+
+    // Straight at the target, with no detour toward the right-lane bridge.
+    EXPECT_EQ(knight->getX(), 10);
+    EXPECT_EQ(knight->getY(), 11);
 }
 
 // ---------------------------------------------------------------------------

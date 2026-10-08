@@ -170,11 +170,12 @@ CardRegistry CardRegistry::withDefaultCards() {
     return registry;
 }
 
-std::shared_ptr<Entity> createEntity(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane) {
+std::shared_ptr<Entity> createEntity(const CardSpec& spec, const Arena& arena, int x, int y, bool isPlayer,
+                                     Lane lane) {
     if (spec.factory) {
-        return spec.factory(spec, x, y, isPlayer, lane);
+        return spec.factory(spec, arena, x, y, isPlayer, lane);
     }
-    return std::make_shared<Entity>(spec, x, y, isPlayer, lane);
+    return std::make_shared<Entity>(spec, arena, x, y, isPlayer, lane);
 }
 
 }  // namespace cr

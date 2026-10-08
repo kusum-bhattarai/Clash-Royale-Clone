@@ -11,6 +11,7 @@
 
 namespace cr {
 
+class Arena;
 class Entity;
 
 /// A collection of card definitions, keyed by id.
@@ -67,10 +68,14 @@ private:
     std::vector<const CardSpec*> m_deployable;
 };
 
-/// Creates an entity from a card.
+/// Creates an entity from a card, positioned on `arena`.
+///
+/// The arena is used to clamp the starting position; the entity does not retain
+/// it, and takes the arena it moves on from whichever Board holds it.
 ///
 /// Honours `CardSpec::factory` when set, so a card may supply its own Entity
 /// subclass; otherwise builds a plain spec-driven Entity.
-std::shared_ptr<Entity> createEntity(const CardSpec& spec, int x, int y, bool isPlayer, Lane lane);
+std::shared_ptr<Entity> createEntity(const CardSpec& spec, const Arena& arena, int x, int y, bool isPlayer,
+                                     Lane lane);
 
 }  // namespace cr

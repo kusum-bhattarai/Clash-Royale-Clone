@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "clash_royale/ai/random_controller.hpp"
+#include "clash_royale/core/arena.hpp"
 #include "clash_royale/sim/card_registry.hpp"
 #include "clash_royale/sim/default_cards.hpp"
 #include "clash_royale/sim/simulation.hpp"
@@ -145,8 +146,8 @@ TEST(CustomCard, UsesTheLowercaseGlyphForTheOpponent) {
     CardRegistry registry;
     const CardSpec& spec = registry.define(harpySpec());
 
-    EXPECT_EQ(Entity(spec, 10, 10, /*isPlayer=*/true, Lane::LEFT).getSymbol(), 'H');
-    EXPECT_EQ(Entity(spec, 10, 10, /*isPlayer=*/false, Lane::LEFT).getSymbol(), 'h');
+    EXPECT_EQ(Entity(spec, standardArena(), 10, 10, /*isPlayer=*/true, Lane::LEFT).getSymbol(), 'H');
+    EXPECT_EQ(Entity(spec, standardArena(), 10, 10, /*isPlayer=*/false, Lane::LEFT).getSymbol(), 'h');
 }
 
 TEST(CustomCard, DamageModifiersApplyInCombat) {
@@ -155,9 +156,9 @@ TEST(CustomCard, DamageModifiersApplyInCombat) {
 
     Board board;
     board.setCombatRules(CombatRules{/*criticalChance=*/0.0f, 1.5f});
-    board.addEntity(createEntity(harpy, 10, 10, true, Lane::LEFT));
+    board.addEntity(createEntity(harpy, standardArena(), 10, 10, true, Lane::LEFT));
     // PEKKA is heavy armor, which the Harpy doubles damage against.
-    board.addEntity(createEntity(registry.get(cards::Pekka), 10, 11, false, Lane::LEFT));
+    board.addEntity(createEntity(registry.get(cards::Pekka), standardArena(), 10, 11, false, Lane::LEFT));
 
     Rng rng{1};
     const int initial = board.getEntities().back()->getHealth();
@@ -177,9 +178,9 @@ TEST(CustomCard, TargetFilterGovernsWhatItWillAttack) {
     const CardSpec& spec = registry.define(groundOnly);
 
     Board board;
-    auto unit = createEntity(spec, 10, 10, true, Lane::LEFT);
+    auto unit = createEntity(spec, standardArena(), 10, 10, true, Lane::LEFT);
     board.addEntity(unit);
-    board.addEntity(createEntity(registry.get(cards::Dragon), 10, 14, false, Lane::LEFT));
+    board.addEntity(createEntity(registry.get(cards::Dragon), standardArena(), 10, 14, false, Lane::LEFT));
 
     EXPECT_EQ(unit->findTarget(board), nullptr) << "a ground-only filter admitted a flier";
 }
@@ -194,10 +195,10 @@ TEST(CustomCard, BuildingsOnlyFilterWalksPastTroops) {
     const CardSpec& spec = registry.define(siege);
 
     Board board;
-    auto unit = createEntity(spec, 10, 10, true, Lane::LEFT);
+    auto unit = createEntity(spec, standardArena(), 10, 10, true, Lane::LEFT);
     board.addEntity(unit);
-    board.addEntity(createEntity(registry.get(cards::Knight), 10, 11, false, Lane::LEFT));
-    board.addEntity(createEntity(registry.get(cards::QueenTower), 10, 25, false, Lane::LEFT));
+    board.addEntity(createEntity(registry.get(cards::Knight), standardArena(), 10, 11, false, Lane::LEFT));
+    board.addEntity(createEntity(registry.get(cards::QueenTower), standardArena(), 10, 25, false, Lane::LEFT));
 
     const auto target = unit->findTarget(board);
     ASSERT_NE(target, nullptr);
@@ -237,7 +238,7 @@ TEST(CustomCard, IsPickedUpByTheDefaultAiAutomatically) {
 
 TEST(CustomCard, ARosterWithoutTowerCardsFailsWithAnActionableMessage) {
     MatchConfig config;
-    config.cards = CardRegistry{};  // no cards at all
+    config.cards = CardRegistry();  // no cards at all
     config.cards.define(harpySpec());
 
     try {
@@ -267,7 +268,7 @@ TEST(CustomCard, TowerCardsCanBeRedirectedToACustomRoster) {
     outpost.towerRole = TowerRole::Queen;
 
     MatchConfig config;
-    config.cards = CardRegistry{};
+    config.cards = CardRegistry();
     config.cards.define(keep);
     config.cards.define(outpost);
     config.cards.define(harpySpec());
@@ -325,15 +326,15 @@ TEST(CustomCard, FactoryHookSuppliesACustomEntitySubclass) {
     cautious.id = "cautious";
     cautious.domain = MovementDomain::Ground;
     cautious.movement = MovementStyle::AxisStep;
-    cautious.factory = [](const CardSpec& spec, int x, int y, bool isPlayer, Lane lane) {
-        return std::make_shared<CautiousEntity>(spec, x, y, isPlayer, lane);
+    cautious.factory = [](const CardSpec& spec, const Arena& arena, int x, int y, bool isPlayer, Lane lane) {
+        return std::make_shared<CautiousEntity>(spec, arena, x, y, isPlayer, lane);
     };
     const CardSpec& spec = registry.define(cautious);
 
     Board board;
-    auto unit = createEntity(spec, 10, 10, true, Lane::LEFT);
+    auto unit = createEntity(spec, standardArena(), 10, 10, true, Lane::LEFT);
     board.addEntity(unit);
-    board.addEntity(createEntity(registry.get(cards::QueenTower), 10, 25, false, Lane::LEFT));
+    board.addEntity(createEntity(registry.get(cards::QueenTower), standardArena(), 10, 25, false, Lane::LEFT));
 
     // Healthy: it advances.
     for (int i = 0; i < 20; ++i) {

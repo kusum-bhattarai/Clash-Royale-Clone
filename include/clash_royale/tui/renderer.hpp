@@ -18,6 +18,7 @@ public:
 private:
     std::vector<std::string> buffer;
     
+    void drawTerrain(const Arena& arena);
     void drawHealthBar(int x, int y, int health, int maxHealth);
     void drawBorders();
 };
