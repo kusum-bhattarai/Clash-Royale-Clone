@@ -8,29 +8,169 @@ on:
 
 jobs:
   build-and-test:
+    name: Build & test (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-    # Check the code
     - name: Check out repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    # Create the build directory
-    - name: Create build directory
-      run: cmake -E make_directory ${{github.workspace}}/build
+    - name: Configure
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # Configure the project with CMake
-    - name: Configure CMake
-      run: cmake -S ${{github.workspace}} -B ${{github.workspace}}/build
+    - name: Build
+      run: cmake --build build --parallel
 
-    # Build the project
-    - name: Build project
-      run: cmake --build ${{github.workspace}}/build
-
-    # Run the tests
     - name: Run tests
-      run: ctest --test-dir ${{github.workspace}}/build --verbose
+      run: ctest --test-dir build --output-on-failure
+
+  # Guards the layering split: cr_core must build with no front-end, no
+  # GoogleTest download and no POSIX terminal dependencies, then install and be
+  # consumable through find_package by a project that knows nothing about us.
+  core-is-standalone:
+    name: Core builds, installs and is consumable
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v4
+
+    - name: Build and install cr_core alone
+      run: |
+        cmake -S . -B build-core \
+          -DCR_BUILD_TUI=OFF \
+          -DCR_BUILD_TESTING=OFF \
+          -DCMAKE_INSTALL_PREFIX="$PWD/prefix"
+        cmake --build build-core --parallel
+        cmake --install build-core
+
+    - name: Run the full suite with no front-end
+      run: |
+        cmake -S . -B build-headless -DCR_BUILD_TUI=OFF -DCR_BUILD_TESTING=ON
+        cmake --build build-headless --parallel
+        ctest --test-dir build-headless --output-on-failure
+        if [ -e build-headless/clash_royale ] || [ -e build-headless/libclash_royale_tui.a ]; then
+          echo "::error::front-end artifacts were built despite CR_BUILD_TUI=OFF"
+          exit 1
+        fi
+
+    - name: Assert GoogleTest was not fetched
+      run: |
+        if [ -d build-core/_deps ]; then
+          echo "::error::GoogleTest was downloaded despite CR_BUILD_TESTING=OFF"
+          exit 1
+        fi
+
+    # Enumerates the core headers rather than naming them, so this cannot go
+    # stale. An earlier version probed two headers by name and kept passing
+    # after one of them was deleted, until the compile itself started failing.
+    - name: Assert every core header is self-contained and free of terminal I/O
+      run: |
+        headers=$(find include/clash_royale/core include/clash_royale/sim \
+                       include/clash_royale/path include/clash_royale/ai \
+                       -name '*.hpp' | sort)
+        if [ -z "$headers" ]; then
+          echo "::error::found no core headers to check; the layout moved"
+          exit 1
+        fi
+        echo "checking $(echo "$headers" | wc -l) headers"
+
+        # Each header must compile on its own, so a consumer can include any
+        # one of them without discovering a missing dependency.
+        for header in $headers; do
+          printf '#include "%s"\nint main(){}\n' "${header#include/}" > one.cpp
+          if ! g++ -std=c++20 -Iinclude -fsyntax-only one.cpp; then
+            echo "::error::${header#include/} is not self-contained"
+            exit 1
+          fi
+        done
+
+        # Together they must not reach the front-end, nor termios. cr_core has
+        # to build where there is no terminal at all.
+        : > probe.cpp
+        for header in $headers; do
+          printf '#include "%s"\n' "${header#include/}" >> probe.cpp
+        done
+        echo 'int main(){}' >> probe.cpp
+        g++ -std=c++20 -Iinclude -H -fsyntax-only probe.cpp 2> deps.txt
+
+        # The architectural rule, stated directly: core may not depend on the
+        # terminal front-end. Platform-independent, unlike grepping for system
+        # headers.
+        if grep -q 'clash_royale/tui/' deps.txt; then
+          echo "::error::a core header reaches the terminal front-end"
+          grep 'clash_royale/tui/' deps.txt
+          exit 1
+        fi
+
+        # And the portability consequence: termios is what made most of the
+        # simulation uncompilable off POSIX before the split.
+        #
+        # Deliberately not checking sys/select. glibc reaches it from <random>
+        # and <thread> by way of <sys/types.h>, so on Linux it appears for any
+        # C++ program and says nothing about this project's layering. An earlier
+        # version of this check grepped for it, passed on macOS where libc++
+        # does not, and failed on Ubuntu for a reason that was not a defect.
+        if grep -q 'termios\.h' deps.txt; then
+          echo "::error::a core header reaches termios"
+          grep 'termios\.h' deps.txt
+          exit 1
+        fi
+
+    - name: Consume the installed package and add a card from outside it
+      run: |
+        mkdir -p consumer && cd consumer
+        cat > CMakeLists.txt <<'EOF'
+        cmake_minimum_required(VERSION 3.16)
+        project(Downstream LANGUAGES CXX)
+        find_package(ClashRoyale REQUIRED)
+        add_executable(downstream main.cpp)
+        target_link_libraries(downstream PRIVATE ClashRoyale::core)
+        EOF
+        cat > main.cpp <<'EOF'
+        // Defines a card and plays a match with it, without modifying the
+        // library. Guards both the packaging (every core header is installed)
+        // and the extension point itself.
+        #include <cstdio>
+        #include "clash_royale/ai/random_controller.hpp"
+        #include "clash_royale/sim/simulation.hpp"
+
+        int main() {
+            cr::CardSpec harpy;
+            harpy.id = "harpy";
+            harpy.symbol = 'H';
+            harpy.health = 240;
+            harpy.damage = 30;
+            harpy.attackRange = 2;
+            harpy.moveSpeed = 1.6f;
+            harpy.elixirCost = 3.0f;
+            harpy.domain = cr::MovementDomain::Air;
+            harpy.movement = cr::MovementStyle::Diagonal;
+            harpy.targets = cr::TargetFilter{true, true};
+            harpy.damageModifiers = {cr::DamageModifier{2.0f, {cr::ArmorClass::Heavy}, {}, {}, {}}};
+
+            cr::MatchConfig config;
+            config.deterministic = true;
+            config.seed = 1234;
+            config.cards.define(harpy);
+
+            cr::Simulation sim{config};
+            cr::RandomAiController ai;
+            int played = 0;
+            while (sim.isRunning()) {
+                ai.update(sim, false, cr::kDefaultTimeStep);
+                if (sim.deploy("harpy", cr::Lane::LEFT, true)) played++;
+                sim.step();
+            }
+            std::printf("roster=%zu played=%d\n", sim.cards().size(), played);
+            return (sim.cards().size() == 11 && played > 0) ? 0 : 1;
+        }
+        EOF
+        cmake -S . -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/prefix"
+        cmake --build build
+        ./build/downstream
