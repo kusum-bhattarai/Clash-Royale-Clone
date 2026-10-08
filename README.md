@@ -1,8 +1,9 @@
 # Clash Royale Clone
 
+[![CI](https://github.com/kusum-bhattarai/Clash-Royale-Clone/actions/workflows/ci.yaml/badge.svg)](https://github.com/kusum-bhattarai/Clash-Royale-Clone/actions/workflows/ci.yaml)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![CMake](https://img.shields.io/badge/build-CMake-green.svg)
-![GoogleTest](https://img.shields.io/badge/tested%20with-GoogleTest-red.svg)
+![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)
 
 A simplified Clash Royale written in C++20. It is two things at once: a playable
 terminal game, and a library you can build your own game or bot on top of.
@@ -13,7 +14,22 @@ seconds to test a strategy or rebalance a card.
 
 ## Example gameplay
 
-<video controls src="SampleGameplay.mp4" title="Gameplay" height="480" width="280"></video>
+<p align="center">
+  <img src="docs/gameplay.gif" alt="Terminal gameplay: troops crossing the bridges and fighting over the towers" width="420">
+</p>
+
+Archers go down the left lane, a Knight down the right, then Goblins. The river
+runs across the middle with a bridge in each lane, and ground troops route to a
+crossing on their own.
+
+The recording is scripted, so it can be remade after a change:
+
+```bash
+cmake --build build --target clash_royale
+vhs docs/demo.tape
+```
+
+That needs [vhs](https://github.com/charmbracelet/vhs).
 
 ## What is in here
 
@@ -324,3 +340,7 @@ field is what makes a bigger arena or a bigger army viable.
   though area-effect damage would need new combat support.
 - **`Canon` is spelled with one `n`.** It is a card id now rather than an enum
   value, so renaming it is a one-line change.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
