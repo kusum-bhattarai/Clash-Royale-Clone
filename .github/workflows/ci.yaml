@@ -90,17 +90,35 @@ jobs:
           fi
         done
 
-        # Together they must not pull in terminal I/O. cr_core has to build on
-        # platforms that have no termios at all.
+        # Together they must not reach the front-end, nor termios. cr_core has
+        # to build where there is no terminal at all.
         : > probe.cpp
         for header in $headers; do
           printf '#include "%s"\n' "${header#include/}" >> probe.cpp
         done
         echo 'int main(){}' >> probe.cpp
         g++ -std=c++20 -Iinclude -H -fsyntax-only probe.cpp 2> deps.txt
-        if grep -qE 'termios|sys/select' deps.txt; then
-          echo "::error::a core header reaches terminal I/O"
-          grep -E 'termios|sys/select' deps.txt
+
+        # The architectural rule, stated directly: core may not depend on the
+        # terminal front-end. Platform-independent, unlike grepping for system
+        # headers.
+        if grep -q 'clash_royale/tui/' deps.txt; then
+          echo "::error::a core header reaches the terminal front-end"
+          grep 'clash_royale/tui/' deps.txt
+          exit 1
+        fi
+
+        # And the portability consequence: termios is what made most of the
+        # simulation uncompilable off POSIX before the split.
+        #
+        # Deliberately not checking sys/select. glibc reaches it from <random>
+        # and <thread> by way of <sys/types.h>, so on Linux it appears for any
+        # C++ program and says nothing about this project's layering. An earlier
+        # version of this check grepped for it, passed on macOS where libc++
+        # does not, and failed on Ubuntu for a reason that was not a defect.
+        if grep -q 'termios\.h' deps.txt; then
+          echo "::error::a core header reaches termios"
+          grep 'termios\.h' deps.txt
           exit 1
         fi
 
