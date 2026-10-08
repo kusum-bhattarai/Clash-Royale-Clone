@@ -10,8 +10,8 @@ Output docs/gameplay.gif
 
 Set Shell bash
 Set FontSize 15
-Set Width 560
-Set Height 800
+Set Width 580
+Set Height 880
 Set Padding 12
 Set Framerate 12
 Set PlaybackSpeed 1.0

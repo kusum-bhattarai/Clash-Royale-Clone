@@ -117,6 +117,13 @@ endif()
 if(CR_BUILD_TESTING)
     enable_testing()
 
+    # The rendering tests need the front-end, which is optional.
+    if(CR_BUILD_TUI)
+        set(CR_RENDER_TESTS tests/test_rendering.cpp)
+    else()
+        set(CR_RENDER_TESTS)
+    endif()
+
     include(FetchContent)
     FetchContent_Declare(
         googletest
@@ -131,9 +138,13 @@ if(CR_BUILD_TESTING)
         tests/test_characterization.cpp
         tests/test_card_registry.cpp
         tests/test_pathfinding.cpp
-        tests/test_strategic_ai.cpp)
-    # The suite links cr_core only: nothing under tests/ touches the front-end.
-    target_link_libraries(run_tests PRIVATE gtest_main cr_core)
+        tests/test_strategic_ai.cpp
+        ${CR_RENDER_TESTS})
+    # cr_tui already links cr_core publicly, so naming both would duplicate the
+    # archive. Without the front-end the suite links cr_core alone, which is
+    # what keeps it runnable with CR_BUILD_TUI off.
+    target_link_libraries(run_tests PRIVATE gtest_main
+                          $<IF:$<BOOL:${CR_BUILD_TUI}>,cr_tui,cr_core>)
     target_include_directories(run_tests PRIVATE tests)
     target_compile_options(run_tests PRIVATE ${CR_WARNINGS})
 

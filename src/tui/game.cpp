@@ -96,7 +96,7 @@ void Game::render() {
     m_renderer.drawBoard(m_sim.board());
     m_renderer.drawStatus(m_sim.elixir(true), m_sim.elixir(false), m_sim.elapsed());
     if (m_state == GameState::SELECTING_LANE) {
-        m_renderer.drawPrompt("SELECT LANE: (L)eft or (R)ight. (X) to cancel.");
+        m_renderer.drawPrompt("SELECT LANE:  (L)eft  (R)ight  (X)cancel");
     }
     m_renderer.display();
 }
