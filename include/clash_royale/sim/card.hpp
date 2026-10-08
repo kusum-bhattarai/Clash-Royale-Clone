@@ -14,18 +14,20 @@ class Arena;
 class Board;
 class Entity;
 
-/// How a unit steps toward its target.
+/// A unit's gait: how it walks the route the pathfinder gives it.
 ///
-/// This stays an enumeration of built-in styles rather than a polymorphic
-/// strategy because movement is about to be rewritten around pathfinding; a
-/// strategy interface designed now would be replaced immediately. Units needing
-/// genuinely custom movement can override Entity::move via CardSpec::factory.
+/// The route itself is no longer the style's business -- a Pathfinder decides
+/// where to go, and this decides how the next tile is reached. HoldAtRange used
+/// to live here; every unit now stops once its target is within attack range,
+/// so it was no longer a distinct gait.
+///
+/// Units needing genuinely custom movement override Entity::move via
+/// CardSpec::factory.
 enum class MovementStyle {
-    Stationary,    ///< buildings: never move
-    AxisStep,      ///< close on the dominant axis, one tile per step
-    Diagonal,      ///< close on both axes at once
-    Zigzag,        ///< alternate axes between steps
-    HoldAtRange,   ///< approach, then stop once the target is within reach
+    Stationary,  ///< buildings: never move
+    AxisStep,    ///< one axis per step, splitting a diagonal into two moves
+    Diagonal,    ///< takes diagonal steps whole
+    Zigzag,      ///< alternates which axis it prefers between steps
 };
 
 /// Broad damage-resistance category.

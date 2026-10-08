@@ -379,14 +379,20 @@ TEST(RiverRouting, GroundUnitsSteerForTheirLaneBridgeRatherThanStraightAcross) {
         << "the knight never got across the river";
 }
 
-TEST(RiverRouting, LaneDecidesWhichCrossingIsUsed) {
+TEST(RiverRouting, LaneDecidesWhichCrossingIsUsedViaTheSpawnPoint) {
+    // Lane no longer steers routing directly. It picks the spawn column, and
+    // the pathfinder then crosses at whichever bridge is nearest -- which, for
+    // a unit deployed in a lane, is that lane's own bridge.
+    //
+    // That is both simpler and closer to the real game: a lane is where you
+    // deploy, not an instruction handed to the unit. It also means a unit
+    // pushed off its lane re-routes sensibly instead of marching back.
     const int riverRow = standardArena().riverRows().front();
 
-    // Two identical units starting at the same place, differing only in lane.
-    // Each should cross at its own bridge.
     for (const auto& [lane, expectedColumn] :
-         {std::pair{Lane::LEFT, 10}, std::pair{Lane::RIGHT, 30}}) {
-        auto knight = spawn(cards::Knight, 20, 12, true, lane);
+         {std::pair{Lane::LEFT, kArenaWidth / 4}, std::pair{Lane::RIGHT, kArenaWidth * 3 / 4}}) {
+        const SpawnPoint spawnAt = spawnPointFor(defaultCards().get(cards::Knight), lane, /*isPlayerOne=*/false);
+        auto knight = spawn(cards::Knight, spawnAt.x, spawnAt.y, false, lane);
         Board board = terrainBoardWith(knight, cards::KingTower, 19, 27);
 
         int crossingColumn = -1;
@@ -398,8 +404,31 @@ TEST(RiverRouting, LaneDecidesWhichCrossingIsUsed) {
         }
 
         ASSERT_GE(crossingColumn, 0) << "the unit never reached the river";
+        EXPECT_NEAR(crossingColumn, expectedColumn, 1) << "crossed at the wrong bridge";
+    }
+}
+
+TEST(RiverRouting, UnitsCrossAtWhicheverBridgeIsNearest) {
+    const int riverRow = standardArena().riverRows().front();
+
+    // Far left and far right, both nominally in the LEFT lane. Each should take
+    // the crossing closest to it rather than the one its lane names.
+    for (const auto& [startX, expectedColumn] :
+         {std::pair{3, kArenaWidth / 4}, std::pair{36, kArenaWidth * 3 / 4}}) {
+        auto knight = spawn(cards::Knight, startX, 10, false, Lane::LEFT);
+        Board board = terrainBoardWith(knight, cards::KingTower, 19, 27);
+
+        int crossingColumn = -1;
+        for (int i = 0; i < 600 && crossingColumn < 0; ++i) {
+            knight->update(board);
+            if (knight->getY() == riverRow) {
+                crossingColumn = knight->getX();
+            }
+        }
+
+        ASSERT_GE(crossingColumn, 0) << "the unit never reached the river from x=" << startX;
         EXPECT_NEAR(crossingColumn, expectedColumn, 1)
-            << "a unit in this lane crossed at the wrong bridge";
+            << "a unit starting at x=" << startX << " did not take the nearest bridge";
     }
 }
 
@@ -441,6 +470,194 @@ TEST(RiverRouting, AnArenaWithoutARiverNeedsNoRouting) {
     // Straight at the target, with no detour toward the right-lane bridge.
     EXPECT_EQ(knight->getX(), 10);
     EXPECT_EQ(knight->getY(), 11);
+}
+
+// ---------------------------------------------------------------------------
+// Routing, collision and route caching
+//
+// Movement now follows a route from a Pathfinder rather than stepping greedily.
+// What matters here is the behavior that emerges from that: units avoid each
+// other, stop when they are close enough to fight, and do not re-search on
+// every step.
+// ---------------------------------------------------------------------------
+
+TEST(Routing, EveryUnitStopsOnceItsTargetIsInReach) {
+    // Previously only ranged units held back; a melee unit walked onto the tile
+    // its target occupied.
+    auto knight = spawn(cards::Knight, 10, 10, true);
+    Board board = boardWith(knight, cards::QueenTower, 10, 20);
+
+    tick(knight, board, 400);
+
+    const auto& tower = board.getEntities().back();
+    EXPECT_NE(knight->getY(), tower->getY()) << "the knight ended up standing on its target";
+    EXPECT_TRUE(isWithinRange(*knight, *tower, knight->getAttackRange()))
+        << "the knight stopped before it could attack";
+}
+
+TEST(Routing, RangedUnitsStopFurtherOutThanMeleeOnes) {
+    auto archers = spawn(cards::Archers, 10, 2, true);
+    Board archerBoard = boardWith(archers, cards::QueenTower, 10, 25);
+    tick(archers, archerBoard, 600);
+
+    auto knight = spawn(cards::Knight, 10, 2, true);
+    Board knightBoard = boardWith(knight, cards::QueenTower, 10, 25);
+    tick(knight, knightBoard, 600);
+
+    // Archers have range 7, the Knight 1, so the Knight closes much further.
+    EXPECT_LT(archers->getY(), knight->getY()) << "the archers closed as far as the melee unit";
+}
+
+TEST(Collision, GroundUnitsDoNotWalkThroughEachOther) {
+    Board board = openBoard();
+    auto walker = spawn(cards::Knight, 10, 10, true);
+    board.addEntity(walker);
+    // A wall of friendly units directly between the walker and its target.
+    for (int x = 8; x <= 12; ++x) {
+        board.addEntity(spawn(cards::Knight, x, 11, true));
+    }
+    board.addEntity(spawn(cards::QueenTower, 10, 20, false));
+
+    for (int i = 0; i < 200; ++i) {
+        board.updateEntities(0.1f);
+        for (const auto& other : board.getEntities()) {
+            if (other == walker || other->isFlying() || other->spec().isBuilding) {
+                continue;
+            }
+            EXPECT_FALSE(walker->getX() == other->getX() && walker->getY() == other->getY())
+                << "two ground units occupied the same tile";
+        }
+    }
+}
+
+TEST(Collision, GroundAndAirUnitsDoNotBlockEachOther) {
+    // A flier and a ground troop share a plane only visually.
+    Board board = openBoard();
+    auto dragon = spawn(cards::Dragon, 10, 10, true);
+    board.addEntity(dragon);
+    // Wall off the row below with ground units.
+    for (int x = 8; x <= 12; ++x) {
+        board.addEntity(spawn(cards::Knight, x, 11, true));
+    }
+    board.addEntity(spawn(cards::QueenTower, 10, 20, false));
+
+    tick(dragon, board, 100);
+
+    EXPECT_GT(dragon->getY(), 11) << "the dragon was blocked by ground units";
+}
+
+TEST(Collision, UnitsRouteAroundACongestedChokepoint) {
+    // A full-width wall of units with a single gap. The walker must find it
+    // rather than grinding against the wall, which is what the congestion
+    // fallback exists for.
+    Board board = openBoard();
+    auto walker = spawn(cards::Knight, 4, 4, true);
+    board.addEntity(walker);
+    for (int x = 1; x <= 38; ++x) {
+        if (x != 30) {
+            board.addEntity(spawn(cards::Knight, x, 10, true));
+        }
+    }
+    board.addEntity(spawn(cards::QueenTower, 4, 20, false));
+
+    for (int i = 0; i < 1200; ++i) {
+        board.updateEntities(0.1f);
+    }
+
+    EXPECT_GT(walker->getY(), 10) << "the walker never found the gap in the wall";
+}
+
+TEST(Collision, BuildingsObstructGroundMovement) {
+    Board board = openBoard();
+    auto knight = spawn(cards::Knight, 10, 10, true);
+    board.addEntity(knight);
+    board.addEntity(spawn(cards::Canon, 10, 11, true));  // friendly, directly in the way
+    board.addEntity(spawn(cards::QueenTower, 10, 20, false));
+
+    for (int i = 0; i < 300; ++i) {
+        board.updateEntities(0.1f);
+        EXPECT_FALSE(knight->getX() == 10 && knight->getY() == 11) << "the knight walked through a building";
+    }
+    EXPECT_GT(knight->getY(), 11) << "the knight never got past the building";
+}
+
+TEST(Routing, RoutesAreCachedRatherThanRecomputedEveryStep) {
+    // Re-searching every step is most of the cost of pathfinding. A route
+    // survives until it runs out, the target drifts, or the repath timer fires.
+    Board board;  // Arena::standard(), so the route is a real one via a bridge
+    auto knight = spawn(cards::Knight, 10, 6, false, Lane::LEFT);
+    board.addEntity(knight);
+    board.addEntity(spawn(cards::KingTower, 19, 27, true));
+
+    const int kSteps = 400;
+    for (int i = 0; i < kSteps; ++i) {
+        knight->update(board, 0.1f);
+    }
+
+    // A Knight steps once per 10 ticks, so 400 ticks is about 40 steps. With a
+    // static target, routing should be asked far less often than that.
+    const std::size_t requests = board.navigator().stats().requests;
+    EXPECT_GT(requests, 0u);
+    EXPECT_LT(requests, 20u) << "routed " << requests << " times in " << kSteps << " ticks";
+}
+
+TEST(Routing, GroundRequestsAreAnsweredFromSharedFields) {
+    Board board;
+    board.addEntity(spawn(cards::KingTower, 19, 27, true));
+    // Several units converging on the same tower should share one field.
+    for (int i = 0; i < 8; ++i) {
+        board.addEntity(spawn(cards::Knight, 4 + i * 3, 6, false, Lane::LEFT));
+    }
+
+    for (int i = 0; i < 60; ++i) {
+        board.updateEntities(0.1f);
+    }
+
+    const auto& stats = board.navigator().stats();
+    EXPECT_GT(stats.fieldLookups, 0u);
+    EXPECT_LE(board.navigator().fieldsBuilt(), stats.fieldLookups)
+        << "a field was built for every lookup instead of being shared";
+}
+
+TEST(Routing, AirRequestsTakeTheStraightLine) {
+    Board board;
+    auto dragon = spawn(cards::Dragon, 10, 6, false);
+    board.addEntity(dragon);
+    board.addEntity(spawn(cards::KingTower, 19, 27, true));
+
+    for (int i = 0; i < 100; ++i) {
+        dragon->update(board, 0.1f);
+    }
+
+    const auto& stats = board.navigator().stats();
+    EXPECT_GT(stats.directLines, 0u) << "an air unit was routed by search instead of a straight line";
+}
+
+TEST(Routing, AUnitWithNoReachableTargetSimplyHoldsStill) {
+    // Sealed into a pocket, with its target outside it. The walls form a
+    // complete ring around the interior x in [2,4], y in [4,6].
+    Arena arena{20, 20};
+    for (int x = 1; x <= 5; ++x) {
+        arena.setTile(x, 3, Tile::Blocked);
+        arena.setTile(x, 7, Tile::Blocked);
+    }
+    for (int y = 3; y <= 7; ++y) {
+        arena.setTile(1, y, Tile::Blocked);
+        arena.setTile(5, y, Tile::Blocked);
+    }
+
+    Board board{arena};
+    auto knight = createEntity(defaultCards().get(cards::Knight), arena, 3, 5, true, Lane::LEFT);
+    board.addEntity(knight);
+    board.addEntity(createEntity(defaultCards().get(cards::QueenTower), arena, 15, 15, false, Lane::LEFT));
+
+    for (int i = 0; i < 200; ++i) {
+        board.updateEntities(0.1f);
+        EXPECT_NE(arena.tile(knight->getX(), knight->getY()), Tile::Blocked);
+    }
+    // It stays inside the pocket rather than escaping or misbehaving.
+    EXPECT_GE(knight->getX(), 2);
+    EXPECT_LE(knight->getX(), 4);
 }
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,7 @@ add_library(cr_core
     src/path/astar.cpp
     src/path/flow_field.cpp
     src/path/direct.cpp
+    src/path/navigator.cpp
     src/ai/random_controller.cpp)
 add_library(ClashRoyale::core ALIAS cr_core)
 

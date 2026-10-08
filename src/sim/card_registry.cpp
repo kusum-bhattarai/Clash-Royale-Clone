@@ -138,7 +138,6 @@ CardRegistry CardRegistry::withDefaultCards() {
     registry.define(dragon);
 
     CardSpec wizard = troop(cards::Wizard, "Wizard", 'W', 500, 65, 5, 1.00f, 1.4f, 4.0f, ArmorClass::Light);
-    wizard.movement = MovementStyle::HoldAtRange;
     wizard.targets = TargetFilter{true, true};
     wizard.damageModifiers = {
         DamageModifier{1.2f, {}, {MovementDomain::Air}, {}, {}},  // splash is effective against air
@@ -146,7 +145,6 @@ CardRegistry CardRegistry::withDefaultCards() {
     registry.define(wizard);
 
     CardSpec archers = troop(cards::Archers, "Archers", 'A', 120, 20, 7, 1.20f, 1.2f, 2.0f, ArmorClass::Light);
-    archers.movement = MovementStyle::HoldAtRange;
     archers.targets = TargetFilter{true, true};
     registry.define(archers);
 

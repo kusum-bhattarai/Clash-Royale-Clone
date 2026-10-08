@@ -7,11 +7,23 @@
 #include <limits>
 
 #include "clash_royale/core/arena.hpp"
+#include "clash_royale/path/navigator.hpp"
 #include "clash_royale/sim/board.hpp"
 #include "clash_royale/sim/combat.hpp"
 
 namespace cr {
 namespace {
+
+/// Steps between forced recomputations of a route.
+constexpr int kRepathSteps = 6;
+
+/// How far a target may drift from where a route was aimed before the route is
+/// considered stale.
+constexpr int kGoalDriftTolerance = 2;
+
+/// Consecutive fully-blocked steps after which a unit asks for a route that
+/// avoids other units rather than only terrain.
+constexpr int kStuckSteps = 3;
 
 /// -1, 0 or +1 according to the sign of `value`.
 int signum(int value) {
@@ -30,7 +42,14 @@ Entity::Entity(const CardSpec& spec, const Arena& arena, int x, int y, bool isPl
       m_attackCooldown(0.0f),
       m_isPlayer(isPlayer),
       m_homeLane(lane),
-      m_stepCount(0) {
+      m_stepCount(0),
+      m_routeIndex(0),
+      m_routeGoal{x, y},
+      // Stagger repathing by spawn position so a wave of units deployed
+      // together does not recompute on the same step.
+      m_repathIn((x + y) % kRepathSteps),
+      m_blockedSteps(0),
+      m_avoidCongestion(false) {
     if (!arena.inInterior(x, y)) {
         logWarning("Initial position out of bounds, clamping");
         arena.clampToInterior(m_x, m_y);
@@ -129,72 +148,110 @@ std::shared_ptr<Entity> Entity::findTarget(const Board& board) const {
     return best;
 }
 
-bool Entity::tryStep(const Arena& arena, int dx, int dy) {
+bool Entity::tryStep(const Board& board, int dx, int dy) {
     if (dx == 0 && dy == 0) {
         return false;
     }
+
     const int nx = m_x + dx;
     const int ny = m_y + dy;
-    if (!arena.isPassable(nx, ny, m_spec->domain)) {
+
+    if (!board.arena().isPassable(nx, ny, m_spec->domain)) {
         return false;
     }
+    // Units of the same domain block each other; a flier and a ground troop do
+    // not. Buildings occupy their tile too, so troops walk around them.
+    if (board.occupancyAt(nx, ny, m_spec->domain) > 0) {
+        return false;
+    }
+
     m_x = nx;
     m_y = ny;
     return true;
 }
 
-void Entity::stepAlongDominantAxis(const Arena& arena, int tx, int ty) {
-    const int dx = tx - m_x;
-    const int dy = ty - m_y;
+bool Entity::stepToward(const Board& board, Point next) {
+    const int dx = signum(next.x - m_x);
+    const int dy = signum(next.y - m_y);
 
-    const int stepX = signum(dx);
-    const int stepY = signum(dy);
+    // Candidate moves in preference order. A diagonal route step is split into
+    // two moves for the axis gaits, so a ground unit still covers one tile per
+    // step and its speed means what it did before pathfinding.
+    int candidates[3][2] = {{0, 0}, {0, 0}, {0, 0}};
 
-    // Ties resolve vertically, matching the original behavior.
-    const bool horizontalFirst = std::abs(dx) > std::abs(dy);
+    switch (m_spec->movement) {
+        case MovementStyle::Stationary:
+            return false;
 
-    // Falling back to the other axis is what lets a unit walk the length of a
-    // bridge: the step it wants may be sideways into water, and refusing it
-    // without an alternative would leave the unit stuck on the bank.
-    if (horizontalFirst) {
-        if (!tryStep(arena, stepX, 0)) {
-            tryStep(arena, 0, stepY);
+        case MovementStyle::Diagonal:
+            candidates[0][0] = dx;
+            candidates[0][1] = dy;
+            candidates[1][0] = dx;
+            candidates[2][1] = dy;
+            break;
+
+        case MovementStyle::AxisStep: {
+            // Lead on whichever axis has further to go overall, so a unit
+            // crossing the arena keeps a steady heading instead of staircasing.
+            const bool horizontalFirst = std::abs(m_routeGoal.x - m_x) > std::abs(m_routeGoal.y - m_y);
+            if (horizontalFirst) {
+                candidates[0][0] = dx;
+                candidates[1][1] = dy;
+            } else {
+                candidates[0][1] = dy;
+                candidates[1][0] = dx;
+            }
+            candidates[2][0] = dx;
+            candidates[2][1] = dy;
+            break;
         }
-    } else {
-        if (!tryStep(arena, 0, stepY)) {
-            tryStep(arena, stepX, 0);
+
+        case MovementStyle::Zigzag:
+            // Alternates axes between steps regardless of heading.
+            if ((m_stepCount % 2) == 0) {
+                candidates[0][0] = dx;
+                candidates[1][1] = dy;
+            } else {
+                candidates[0][1] = dy;
+                candidates[1][0] = dx;
+            }
+            candidates[2][0] = dx;
+            candidates[2][1] = dy;
+            break;
+    }
+
+    for (const auto& candidate : candidates) {
+        if (tryStep(board, candidate[0], candidate[1])) {
+            return true;
         }
     }
+    return false;
 }
 
-void Entity::waypointToward(const Arena& arena, const Entity& target, int& outX, int& outY) const {
-    outX = target.getX();
-    outY = target.getY();
+void Entity::ensureRoute(const Board& board, Point goal) {
+    const bool exhausted = m_routeIndex >= m_route.size();
+    const int drift = std::abs(goal.x - m_routeGoal.x) + std::abs(goal.y - m_routeGoal.y);
 
-    // Air units ignore terrain, and an arena without a river needs no routing.
-    if (m_spec->domain == MovementDomain::Air || !arena.hasRiver()) {
+    if (!exhausted && drift <= kGoalDriftTolerance && m_repathIn > 0 && !m_avoidCongestion) {
         return;
     }
 
-    const int mySide = arena.riverSide(m_y);
-    const int targetSide = arena.riverSide(outY);
+    const BoardObstacles obstacles = board.obstacles();
 
-    // Already on the target's side, and not standing on the river itself.
-    if (mySide == targetSide && mySide != 0) {
-        return;
-    }
+    PathRequest request;
+    request.from = Point{m_x, m_y};
+    request.to = goal;
+    request.domain = m_spec->domain;
+    // Only a unit that local avoidance has failed pays for a route that
+    // accounts for other units; everyone else shares the terrain-only field.
+    request.obstacles = m_avoidCongestion ? &obstacles : nullptr;
 
-    // Steer for this unit's crossing, aiming at the first row past the river on
-    // the target's side so the unit commits to the bridge and walks off it
-    // rather than stopping on top.
-    outX = arena.bridgeColumnFor(m_homeLane, m_x);
-    if (targetSide > 0) {
-        outY = arena.riverRows().back() + 1;
-    } else if (targetSide < 0) {
-        outY = arena.riverRows().front() - 1;
-    } else {
-        outY = target.getY();  // the target is itself on the crossing
-    }
+    const std::optional<Path> route = board.navigator().route(board.arena(), request);
+    m_route = route.value_or(Path{});
+    m_routeIndex = 0;
+    m_routeGoal = goal;
+    m_repathIn = kRepathSteps;
+    m_avoidCongestion = false;
 }
 
 void Entity::move(const Board& board) {
@@ -204,59 +261,37 @@ void Entity::move(const Board& board) {
 
     const std::shared_ptr<Entity> target = findTarget(board);
     if (target == nullptr) {
+        m_route.clear();
+        m_routeIndex = 0;
         return;
     }
 
-    const Arena& arena = board.arena();
-
-    // Ranged units stop once the real target is in reach, regardless of
-    // whether they are still routing toward a crossing.
-    if (m_spec->movement == MovementStyle::HoldAtRange &&
-        isWithinRange(*this, *target, m_spec->attackRange)) {
+    // Every unit stops advancing once its target is in reach. This used to be
+    // the HoldAtRange gait, which only ranged units had; melee units walked
+    // onto the tile their target was standing on.
+    if (isWithinRange(*this, *target, m_spec->attackRange)) {
+        m_route.clear();
+        m_routeIndex = 0;
         return;
     }
 
-    int goalX = 0;
-    int goalY = 0;
-    waypointToward(arena, *target, goalX, goalY);
+    --m_repathIn;
+    ensureRoute(board, Point{target->getX(), target->getY()});
 
-    const int dx = goalX - m_x;
-    const int dy = goalY - m_y;
-    const int stepX = signum(dx);
-    const int stepY = signum(dy);
+    if (m_routeIndex >= m_route.size()) {
+        return;  // nowhere to go
+    }
 
-    switch (m_spec->movement) {
-        case MovementStyle::Stationary:
-            return;
-
-        case MovementStyle::AxisStep:
-        case MovementStyle::HoldAtRange:
-            stepAlongDominantAxis(arena, goalX, goalY);
-            break;
-
-        case MovementStyle::Diagonal:
-            // Closes on both axes in the same step, then settles for one axis
-            // if the diagonal tile is not enterable.
-            if (!tryStep(arena, stepX, stepY)) {
-                if (!tryStep(arena, stepX, 0)) {
-                    tryStep(arena, 0, stepY);
-                }
-            }
-            break;
-
-        case MovementStyle::Zigzag:
-            // Alternates which axis it closes on, rather than exhausting one
-            // before starting the other.
-            if ((m_stepCount % 2) == 0) {
-                if (!tryStep(arena, stepX, 0)) {
-                    tryStep(arena, 0, stepY);
-                }
-            } else {
-                if (!tryStep(arena, 0, stepY)) {
-                    tryStep(arena, stepX, 0);
-                }
-            }
-            break;
+    const Point next = m_route[m_routeIndex];
+    if (stepToward(board, next)) {
+        m_blockedSteps = 0;
+        if (Point{m_x, m_y} == next) {
+            ++m_routeIndex;
+        }
+    } else if (++m_blockedSteps >= kStuckSteps) {
+        // Hemmed in by other units. Ask for a route that routes around them.
+        m_blockedSteps = 0;
+        m_avoidCongestion = true;
     }
 }
 

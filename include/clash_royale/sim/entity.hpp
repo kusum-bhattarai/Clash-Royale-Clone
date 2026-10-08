@@ -4,6 +4,7 @@
 #include <string>
 
 #include "clash_royale/core/arena.hpp"
+#include "clash_royale/path/pathfinder.hpp"
 #include "clash_royale/core/types.hpp"
 #include "clash_royale/sim/card.hpp"
 
@@ -88,25 +89,24 @@ protected:
     /// Takes one movement step, following the card's MovementStyle.
     virtual void move(const Board& board);
 
-    /// The tile this entity is actually steering for.
+    /// Recomputes the cached route if it has gone stale.
     ///
-    /// For an air unit, or a ground unit already on the target's side of the
-    /// river, this is the target itself. A ground unit that has to cross first
-    /// steers for its lane's bridge instead -- which is what finally gives
-    /// `Lane` an effect on behavior.
+    /// A route survives across steps, which is the point: re-searching every
+    /// step for a target that has barely moved is almost all of the cost of
+    /// pathfinding. It is recomputed when the route runs out, when the target
+    /// has drifted more than a couple of tiles from where the route was aimed,
+    /// or when the repath timer expires.
+    void ensureRoute(const Board& board, Point goal);
+
+    /// Advances one tile toward `next`, per this card's gait.
     ///
-    /// This two-leg routing is deliberately the simplest thing that keeps units
-    /// off the water. It is the seam the pathfinder replaces: a real search
-    /// handles arbitrary terrain, not just one river.
-    void waypointToward(const Arena& arena, const Entity& target, int& outX, int& outY) const;
+    /// Returns false when every candidate move was blocked, which is how local
+    /// congestion is detected.
+    bool stepToward(const Board& board, Point next);
 
-    /// Moves one tile along whichever axis is further from (tx, ty), refusing
-    /// tiles this entity cannot enter and trying the other axis instead.
-    void stepAlongDominantAxis(const Arena& arena, int tx, int ty);
-
-    /// Moves one tile on `axis` if the destination is passable.
-    /// Returns whether it moved.
-    bool tryStep(const Arena& arena, int dx, int dy);
+    /// Moves by (dx, dy) if the destination is both passable terrain and
+    /// unoccupied. Returns whether it moved.
+    bool tryStep(const Board& board, int dx, int dy);
 
     void logWarning(const std::string& message) const;
 
@@ -120,8 +120,25 @@ protected:
     bool m_isPlayer;
     Lane m_homeLane;
 
-    /// Movement steps taken so far, for styles that vary between steps.
+    /// Movement steps taken so far, for gaits that vary between steps.
     int m_stepCount;
+
+    /// The cached route and how far along it this entity has walked.
+    Path m_route;
+    std::size_t m_routeIndex;
+
+    /// The tile the cached route was aimed at, for detecting target drift.
+    Point m_routeGoal;
+
+    /// Steps until the route is recomputed regardless of drift. Seeded from
+    /// the spawn position so that units do not all repath on the same step.
+    int m_repathIn;
+
+    /// Consecutive steps in which every move was blocked. Past a threshold the
+    /// next route is asked to route around other units instead of ignoring
+    /// them.
+    int m_blockedSteps;
+    bool m_avoidCongestion;
 };
 
 }  // namespace cr
