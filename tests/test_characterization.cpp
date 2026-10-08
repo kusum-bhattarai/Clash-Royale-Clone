@@ -74,9 +74,23 @@ Board terrainBoardWith(const std::shared_ptr<Entity>& self, std::string_view ene
 // these values must survive that move.
 // ---------------------------------------------------------------------------
 
-TEST(ArenaGeometry, BoardDimensions) {
-    EXPECT_EQ(kArenaWidth, 40);
+TEST(ArenaGeometry, BoardDimensionsAreOddSoTheInteriorHasATrueCentre) {
+    EXPECT_EQ(kArenaWidth, 41);
     EXPECT_EQ(kArenaHeight, 35);
+
+    // The playable interior runs from 1 to extent - 2. Both spans must have an
+    // odd length, so there is a single middle column and row for the towers and
+    // the river to sit on. With an even width the interior was centred on 19.5
+    // while everything was placed about 20, which showed up on screen as the
+    // whole board sitting a column right of its own frame.
+    const int interiorWidth = kArenaWidth - 2;
+    const int interiorHeight = kArenaHeight - 2;
+    EXPECT_EQ(interiorWidth % 2, 1) << "no centre column";
+    EXPECT_EQ(interiorHeight % 2, 1) << "no centre row";
+
+    // And that centre is where the arena puts its midline.
+    EXPECT_EQ(1 + interiorWidth / 2, kArenaWidth / 2);
+    EXPECT_EQ(1 + interiorHeight / 2, kArenaHeight / 2);
 }
 
 TEST(ArenaGeometry, TowerLayoutIsMirroredOnBothAxes) {

@@ -21,7 +21,12 @@ namespace cr {
 /// These are the dimensions of `Arena::standard()`. An Arena carries its own
 /// extent, so a match may be played on a different size; these remain as the
 /// default the shipped game uses.
-inline constexpr int kArenaWidth = 40;
+/// Both are odd so that the playable interior, which runs from 1 to
+/// `extent - 2`, has a true centre column and row. With an even width the
+/// interior spanned 1..38, centred on 19.5, while the towers and bridges were
+/// placed symmetrically about 20, so the whole formation sat half a tile right
+/// of the frame it was drawn in.
+inline constexpr int kArenaWidth = 41;
 inline constexpr int kArenaHeight = 35;
 
 /// The default simulation step, in seconds.
